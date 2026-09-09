@@ -21,30 +21,40 @@ st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 侧边栏：数据管理 & 匿名化/脱敏设置
+# 2. 侧边栏：数据管理 & 纯动物/符号代称优化
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
-anonymize_type = st.sidebar.radio(
-    "选择脱敏方式：",
-    ["动物代称 (如 🦊 顾问 A)", "姓氏脱敏 (如 覃**)"],
-    disabled=not enable_anonymize
-)
-
 RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
-ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
+ANIMALS = ["🦊 狐狸", "🐼 熊猫", "🦁 狮子", "🐰 兔子", "🐯 老虎"]
+ANIMAL_ICONS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
 
-# 生成统一长度与对齐的名称，避免错落感
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
+
 if enable_anonymize:
-    if "动物代称" in anonymize_type:
-        alias_map = {p: f"{ANIMALS[i]} 顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
+    anonymize_type = st.sidebar.radio(
+        "选择脱敏样式：",
+        ["纯动物标记 (如 🦊 狐狸)", "纯动物图标 + 姓氏 (如 🦊 覃顾问)", "仅姓氏隐去 (如 覃**)"],
+    )
+    if "纯动物标记" in anonymize_type:
+        alias_map = {p: ANIMALS[i] for i, p in enumerate(RAW_PERSONS)}
+    elif "纯动物图标 + 姓氏" in anonymize_type:
+        alias_map = {p: f"{ANIMAL_ICONS[i]} {p[0]}顾问" for i, p in enumerate(RAW_PERSONS)}
     else:
         alias_map = {p: f"{p[0]}**" for p in RAW_PERSONS}
 else:
     alias_map = {p: p for p in RAW_PERSONS}
 
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
+
+# 展示脱敏对照提示卡片（提高管理使用体验）
+if enable_anonymize:
+    with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
+        mapping_df = pd.DataFrame({
+            "真实姓名": RAW_PERSONS,
+            "展示代称": PERSONS
+        })
+        st.dataframe(mapping_df, hide_index=True, use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 3. 基础数据定义
@@ -135,10 +145,10 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 4. 录入表单
+# 4. 录入表单优化
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.subheader("➕ 录入单日新增招生")
+st.sidebar.subheader("➕ 快捷录入新增招生")
 
 with st.sidebar.form("add_delta_form"):
     input_date = st.selectbox("选择日期", DATES)
@@ -146,7 +156,7 @@ with st.sidebar.form("add_delta_form"):
     input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
 
-    submit_btn = st.form_submit_button("提交录入")
+    submit_btn = st.form_submit_button("确认录入数据")
     if submit_btn:
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
@@ -159,12 +169,12 @@ with st.sidebar.form("add_delta_form"):
         )
         st.sidebar.success(f"已成功添加：{input_date} {input_major} - {input_person_disp} +{input_val}人")
 
-if st.sidebar.button("🔄 重置为默认数据"):
+if st.sidebar.button("🔄 重置为默认演示数据"):
     init_default_data()
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 数据计算
+# 5. 数据计算逻辑
 # -----------------------------------------------------------------------------
 def get_processed_df(selected_date):
     df_result = st.session_state["base_targets"].copy()
@@ -177,9 +187,9 @@ def get_processed_df(selected_date):
             df_result.loc[df_result["专业/基础名称"] == major, col] += val
     return df_result
 
-st.subheader("🗓️ 表格视图选择")
+st.subheader("🗓️ 数据看板切片")
 view_options = [f"{d}单日" for d in DATES] + ["📅 当月累计数据（截至9月7日）"]
-date_option = st.radio("切换时间范围：", view_options, index=len(view_options) - 1, horizontal=True)
+date_option = st.radio("切换展示区间：", view_options, index=len(view_options) - 1, horizontal=True)
 
 raw_date_name = date_option.replace("单日", "")
 calc_df = get_processed_df(raw_date_name)
@@ -206,13 +216,13 @@ total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
 
-rate_row = {"专业/基础名称": "2026年9月目标人数完成比例"}
+rate_row = {"专业/基础名称": "2026年9月目标完成率"}
 for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 # -----------------------------------------------------------------------------
-# 6. HTML 表格
+# 6. HTML 精美数据表格
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     rows_html = ""
@@ -257,7 +267,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
         th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
         .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: bold; }}
         .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
-        .bg-person {{ background-color: #D0E0E3; font-weight: bold; }}
+        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 14px; }}
         .bg-total {{ background-color: #FFF2CC; font-weight: bold; }}
         .num {{ font-family: "Times New Roman", serif; }}
         .zh {{ font-family: SimSun, serif; }}
@@ -309,16 +319,16 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     """
     return full_html
 
-st.markdown("### 📝 2026年9月招生数据动态表")
+st.markdown("### 📝 2026年9月招生数据动态明细")
 calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化柱状图生成（分明色彩的横柱图 + 优化对比）
+# 7. 可视化图表展示（对比柱图 + 鲜艳横柱图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 📊 基础柱状图分析")
+st.markdown("### 📊 基础指标分析")
 
 c1, c2 = st.columns(2)
 
@@ -332,18 +342,18 @@ with c1:
                 name="目标人数", x=PERSONS, y=person_target_vals, 
                 marker_color="#0B3C5D", text=person_target_vals, textposition="outside",
                 textfont=dict(size=12, color="#000000"),
-                marker_line_color="#000000", marker_line_width=1.5
+                marker_line_color="#000000", marker_line_width=1.2
             ),
             go.Bar(
                 name="实际完成", x=PERSONS, y=person_actual_vals, 
                 marker_color="#FF3D00", text=person_actual_vals, textposition="outside",
                 textfont=dict(size=12, color="#000000"),
-                marker_line_color="#000000", marker_line_width=1.5
+                marker_line_color="#000000", marker_line_width=1.2
             ),
         ]
     )
     fig_person.update_layout(
-        title="<b>各人员目标 vs 实际完成对比</b>",
+        title="<b>各成员目标 vs 实际完成对比</b>",
         barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         plot_bgcolor="#FFFFFF",
@@ -356,7 +366,7 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     
-    # 横柱图使用缤纷分明的对比调色板（Bold 色系），每个专业颜色独立鲜明
+    # 横柱图使用 Bold 高对比配色，每个专业颜色独立鲜明
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
         title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
@@ -365,7 +375,7 @@ with c2:
     )
     fig_major.update_layout(
         yaxis={"categoryorder": "total ascending"},
-        showlegend=False,  # 隐藏图例以保持视图干爽
+        showlegend=False,
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
@@ -380,26 +390,26 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度分析（精细线宽折线图 + 饼图）
+# 8. 时间维度分析（精细折线 + 饼图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🔄 多维动态趋势与构成分析")
+st.markdown("### 🔄 动态趋势与人员贡献构成分析")
 
 ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
 
 with ctrl_c1:
-    person_mode = st.radio("选择分析人员视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
+    person_mode = st.radio("选择分析视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
 
 with ctrl_c2:
     if person_mode == "单人独立分析":
-        selected_person_disp = st.selectbox("选择具体人员：", PERSONS + ["其他人员"])
+        selected_person_disp = st.selectbox("选择分析成员：", PERSONS + ["其他人员"])
     elif person_mode == "多人员对比分析":
-        selected_persons_disp = st.multiselect("选择对比人员：", PERSONS + ["其他人员"], default=PERSONS[:3])
+        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=PERSONS[:3])
     else:
         selected_person_disp = "全体人员"
 
 with ctrl_c3:
-    time_granularity = st.selectbox("选择时间汇总粒度：", ["按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"])
+    time_granularity = st.selectbox("时间汇总粒度：", ["按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"])
 
 time_records = []
 for d_idx, d in enumerate(DATES):
@@ -432,13 +442,12 @@ with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>全体人员招生趋势 ({x_col})</b>", text="新增报名数")
-        # 折线宽度调细为 2，数据点标记收缩至 6
+        # 保持精致线宽 2
         fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=2, marker=dict(size=6, color="#D50000"))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 ({x_col})</b>", text="新增报名数")
-        # 折线宽度调细为 2
         fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=2, marker=dict(size=6, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
@@ -448,7 +457,6 @@ with chart_col1:
             title=f"📈 <b>多人招生趋势对比 ({x_col})</b>",
             color_discrete_sequence=px.colors.qualitative.Bold
         )
-        # 折线宽度调细为 2
         fig_line.update_traces(line_width=2, marker=dict(size=6))
 
     fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
@@ -464,7 +472,7 @@ with chart_col2:
     if person_mode == "全体人员":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
         fig_pie = px.pie(
-            df_pie, values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献比例</b>", 
+            df_pie, values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献占比</b>", 
             hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
         )
         fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
@@ -482,17 +490,17 @@ with chart_col2:
             df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
             fig_pie = px.pie(
                 df_major_pie, values="新增人数", names="专业/基础", 
-                title=f"🍩 <b>【{selected_person_disp}】招生成交专业构成</b>", 
+                title=f"🍩 <b>【{selected_person_disp}】专业成交构成</b>", 
                 hole=0.4, color_discrete_sequence=px.colors.qualitative.Set1
             )
             fig_pie.update_traces(textinfo="label+percent+value", textposition="inside", marker=dict(line=dict(color="#FFFFFF", width=2)))
         else:
             fig_pie = go.Figure()
-            fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量招生数据")
+            fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量数据")
     else:
         df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
         fig_pie = px.pie(
-            df_pie, values="新增报名数", names="人员", title=f"🍩 <b>对比人员总量占比构成</b>", 
+            df_pie, values="新增报名数", names="人员", title=f"🍩 <b>对比成员占比构成</b>", 
             hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
         )
         fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
@@ -501,7 +509,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出逻辑
+# 9. 导出 Excel / ZIP 打包逻辑
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -626,12 +634,12 @@ def build_full_export_pack(excel_bytes, fig_dict):
                 img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
                 zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
             except Exception:
-                zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖库 (pip install kaleido)")
+                zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖包 (pip install kaleido)")
 
     return zip_buffer.getvalue()
 
 st.markdown("---")
-st.markdown("### 📥 结果导出选项")
+st.markdown("### 📥 结果导出与报表生成")
 
 excel_data = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 
@@ -648,7 +656,7 @@ col_d1, col_d2 = st.columns(2)
 
 with col_d1:
     st.download_button(
-        label="📊 仅导出当前模式 Excel 表格 (.xlsx)",
+        label="📊 导出 Excel 动态明细表 (.xlsx)",
         data=excel_data,
         file_name="2026年9月招生数据动态表.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -657,7 +665,7 @@ with col_d1:
 
 with col_d2:
     st.download_button(
-        label="📦 一键打包导出：Excel 表格 + 4张高精数据分析图表 (.zip)",
+        label="📦 一键打包导出全量图表与 Excel 压缩包 (.zip)",
         data=zip_data,
         file_name="2026年9月招生看板及图表全量导出包.zip",
         mime="application/zip",
