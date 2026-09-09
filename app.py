@@ -315,7 +315,7 @@ html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, R
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化柱状图生成（极高对比度 + 齐整排版）
+# 7. 可视化柱状图生成（分明色彩的横柱图 + 优化对比）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础柱状图分析")
@@ -326,7 +326,6 @@ with c1:
     person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
     person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
 
-    # 深度强化对比度：经典深蓝色 (#0B3C5D) VS 醒目亮红橘色 (#FF3D00)
     fig_person = go.Figure(
         data=[
             go.Bar(
@@ -357,14 +356,16 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     
-    # 横向柱状图使用高饱和度深绿色 (#00796B)
+    # 横柱图使用缤纷分明的对比调色板（Bold 色系），每个专业颜色独立鲜明
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
         title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
-        color_discrete_sequence=["#00796B"]
+        color="专业/基础名称",
+        color_discrete_sequence=px.colors.qualitative.Bold
     )
     fig_major.update_layout(
         yaxis={"categoryorder": "total ascending"},
+        showlegend=False,  # 隐藏图例以保持视图干爽
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
@@ -374,12 +375,12 @@ with c2:
         textposition="outside", 
         textfont=dict(size=12, color="#000000"),
         marker_line_color="#000000", 
-        marker_line_width=1.5
+        marker_line_width=1.2
     )
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度分析（消除了错落感与错位的折线/饼图）
+# 8. 时间维度分析（精细线宽折线图 + 饼图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 多维动态趋势与构成分析")
@@ -431,12 +432,14 @@ with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>全体人员招生趋势 ({x_col})</b>", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=4, marker=dict(size=10, color="#D50000"))
+        # 折线宽度调细为 2，数据点标记收缩至 6
+        fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=2, marker=dict(size=6, color="#D50000"))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 ({x_col})</b>", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=4, marker=dict(size=10, color="#2962FF"))
+        # 折线宽度调细为 2
+        fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=2, marker=dict(size=6, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
@@ -445,7 +448,8 @@ with chart_col1:
             title=f"📈 <b>多人招生趋势对比 ({x_col})</b>",
             color_discrete_sequence=px.colors.qualitative.Bold
         )
-        fig_line.update_traces(line_width=3, marker=dict(size=8))
+        # 折线宽度调细为 2
+        fig_line.update_traces(line_width=2, marker=dict(size=6))
 
     fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
     fig_line.update_layout(
