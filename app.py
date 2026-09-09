@@ -212,7 +212,7 @@ for c in num_cols:
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 # -----------------------------------------------------------------------------
-# 6. HTML 数据表格（表头纯动物图像）
+# 6. HTML 数据表格
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     rows_html = ""
@@ -315,7 +315,7 @@ html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, R
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化图表展示
+# 7. 可视化图表展示（移除描边设置）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础指标分析")
@@ -326,19 +326,18 @@ with c1:
     person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
     person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
 
+    # 去掉描边：不再在 go.Bar 中指定 marker_line_color 与 marker_line_width
     fig_person = go.Figure(
         data=[
             go.Bar(
                 name="目标人数", x=PERSONS, y=person_target_vals, 
                 marker_color="#0B3C5D", text=person_target_vals, textposition="outside",
-                textfont=dict(size=12, color="#000000"),
-                marker_line_color="#000000", marker_line_width=1.2
+                textfont=dict(size=12, color="#000000")
             ),
             go.Bar(
                 name="实际完成", x=PERSONS, y=person_actual_vals, 
                 marker_color="#FF3D00", text=person_actual_vals, textposition="outside",
-                textfont=dict(size=12, color="#000000"),
-                marker_line_color="#000000", marker_line_width=1.2
+                textfont=dict(size=12, color="#000000")
             ),
         ]
     )
@@ -357,6 +356,7 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     
+    # 去掉描边：不再在 update_traces 中指定 marker_line_color 与 marker_line_width
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
         title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
@@ -373,9 +373,7 @@ with c2:
     )
     fig_major.update_traces(
         textposition="outside", 
-        textfont=dict(size=12, color="#000000"),
-        marker_line_color="#000000", 
-        marker_line_width=1.2
+        textfont=dict(size=12, color="#000000")
     )
     st.plotly_chart(fig_major, use_container_width=True)
 
