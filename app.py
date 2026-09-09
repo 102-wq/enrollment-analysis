@@ -1,4 +1,5 @@
 import io
+import zipfile
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 import pandas as pd
@@ -25,8 +26,6 @@ st.markdown("---")
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
-# 脱敏/匿名模式开关
-st.sidebar.subheader("🔒 隐私与显示设置")
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
 anonymize_type = st.sidebar.radio(
     "选择脱敏方式：",
@@ -34,10 +33,8 @@ anonymize_type = st.sidebar.radio(
     disabled=not enable_anonymize
 )
 
-# 原始真实人员姓名
 RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
 
-# 生成映射字典与展示姓名列表
 if enable_anonymize:
     if "咨询顾问" in anonymize_type:
         alias_map = {p: f"咨询顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
@@ -49,7 +46,7 @@ else:
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
 # -----------------------------------------------------------------------------
-# 3. 基础数据定义 (映射到匿名/真实姓名)
+# 3. 基础数据定义
 # -----------------------------------------------------------------------------
 MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
@@ -88,9 +85,7 @@ def init_default_data():
     st.session_state["base_targets"] = pd.DataFrame(base_data)
 
     st.session_state["daily_deltas"] = {
-        "9月1日": [
-            ("电气基础", "覃小燕_实际", 1)
-        ],
+        "9月1日": [("电气基础", "覃小燕_实际", 1)],
         "9月2日": [
             ("环保专业", "覃小燕_实际", 1),
             ("环保专业", "左丹丹_实际", 1),
@@ -139,7 +134,7 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 4. 单日新增招生录入表单
+# 4. 录入表单
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 录入单日新增招生")
@@ -168,7 +163,7 @@ if st.sidebar.button("🔄 重置为默认数据"):
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 数据视图与动态计算
+# 5. 数据计算
 # -----------------------------------------------------------------------------
 def get_processed_df(selected_date):
     df_result = st.session_state["base_targets"].copy()
@@ -192,7 +187,6 @@ act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
 calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
 calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
-# 底部汇总逻辑
 num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
 sum_row = {"专业/基础名称": "合计"}
 for c in num_cols:
@@ -217,7 +211,7 @@ for c in num_cols:
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 # -----------------------------------------------------------------------------
-# 6. 原生 HTML 表格渲染
+# 6. HTML 表格
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     rows_html = ""
@@ -234,7 +228,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
             <td class="zh">{row['专业/基础名称']}</td>
             <td class="num">{row['目标人数']}</td>
             {person_cells}
-            <td class="num">{row['其他人员_实际'] if row['other_act'] > 0 else ''}</td>
+            <td class="num">{row['other_act'] if row['other_act'] > 0 else ''}</td>
             <td class="num">{row['目标人数']}</td>
             <td class="num">{row['实际完成']}</td>
             <td class="num">{row['与目标之差']}</td>
@@ -315,13 +309,12 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     return full_html
 
 st.markdown("### 📝 2026年9月招生数据动态表")
-# 临时修正字典读取键名
 calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 components.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化分析区域（柱状图）
+# 7. 可视化柱状图生成
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础柱状图分析")
@@ -334,22 +327,8 @@ with c1:
 
     fig_person = go.Figure(
         data=[
-            go.Bar(
-                name="目标人数",
-                x=PERSONS,
-                y=person_target_vals,
-                marker_color="#A6C8E0",
-                text=person_target_vals,
-                textposition="auto"
-            ),
-            go.Bar(
-                name="实际完成",
-                x=PERSONS,
-                y=person_actual_vals,
-                marker_color="#2E8B57",
-                text=person_actual_vals,
-                textposition="auto"
-            ),
+            go.Bar(name="目标人数", x=PERSONS, y=person_target_vals, marker_color="#A6C8E0", text=person_target_vals, textposition="auto"),
+            go.Bar(name="实际完成", x=PERSONS, y=person_actual_vals, marker_color="#2E8B57", text=person_actual_vals, textposition="auto"),
         ]
     )
     fig_person.update_layout(
@@ -362,24 +341,19 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     fig_major = px.bar(
-        top_majors,
-        x="实际完成",
-        y="专业/基础名称",
-        orientation="h",
-        title="招生完成人数 Top 8 专业/基础 (横柱图)",
-        color="实际完成",
-        color_continuous_scale="Viridis",
-        text="实际完成"
+        top_majors, x="实际完成", y="专业/基础名称", orientation="h",
+        title="招生完成人数 Top 8 专业/基础 (横柱图)", color="实际完成",
+        color_continuous_scale="Viridis", text="实际完成"
     )
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"})
     fig_major.update_traces(textposition="outside")
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 优化后的时间维度与趋势分析（折线图/饼图）
+# 8. 时间维度分析（折线图/饼图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🔄 多维动态趋势与构成分析（优化版）")
+st.markdown("### 🔄 多维动态趋势与构成分析")
 
 ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
 
@@ -395,12 +369,8 @@ with ctrl_c2:
         selected_person_disp = "全体人员"
 
 with ctrl_c3:
-    time_granularity = st.selectbox(
-        "选择时间汇总粒度：",
-        ["按按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"]
-    )
+    time_granularity = st.selectbox("选择时间汇总粒度：", ["按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"])
 
-# 构建基础流水数据集
 time_records = []
 for d_idx, d in enumerate(DATES):
     w = WEEKDAYS[d_idx]
@@ -412,18 +382,10 @@ for d_idx, d in enumerate(DATES):
     
     for p_name, val in d_dict.items():
         disp_p_name = alias_map.get(p_name, p_name)
-        time_records.append({
-            "日期": d,
-            "星期": w,
-            "类型": is_weekend,
-            "月份": "2026年9月",
-            "人员": disp_p_name,
-            "新增报名数": val
-        })
+        time_records.append({"日期": d, "星期": w, "类型": is_weekend, "月份": "2026年9月", "人员": disp_p_name, "新增报名数": val})
 
 df_time_series = pd.DataFrame(time_records)
 
-# 粒度计算与 X 轴控制
 if "按日明细" in time_granularity:
     x_col = "日期"
     category_order = DATES
@@ -436,101 +398,57 @@ else:
 
 chart_col1, chart_col2 = st.columns(2)
 
-# --- 左侧：折线图计算与渲染 ---
 with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(
-            df_chart_line, x=x_col, y="新增报名数", markers=True,
-            title=f"📈 全体人员招生趋势 ({x_col}维度)", text="新增报名数"
-        )
-        fig_line.update_traces(
-            textposition="top center",
-            line_color="#2E8B57",
-            line_width=3,
-            marker=dict(size=8)
-        )
-        
+        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 全体人员招生趋势 ({x_col}维度)", text="新增报名数")
+        fig_line.update_traces(textposition="top center", line_color="#2E8B57", line_width=3, marker=dict(size=8))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(
-            df_chart_line, x=x_col, y="新增报名数", markers=True,
-            title=f"📈 【{selected_person_disp}】个人趋势 ({x_col}维度)", text="新增报名数"
-        )
-        fig_line.update_traces(
-            textposition="top center",
-            line_color="#1F77B4",
-            line_width=3,
-            marker=dict(size=8)
-        )
-        
+        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 【{selected_person_disp}】个人趋势 ({x_col}维度)", text="新增报名数")
+        fig_line.update_traces(textposition="top center", line_color="#1F77B4", line_width=3, marker=dict(size=8))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
-        fig_line = px.line(
-            df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True,
-            title=f"📈 多人招生趋势对比 ({x_col}维度)"
-        )
+        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True, title=f"📈 多人招生趋势对比 ({x_col}维度)")
         fig_line.update_traces(line_width=2.5, marker=dict(size=6))
 
     fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
-    fig_line.update_layout(
-        yaxis_title="新增报名人数",
-        xaxis_title=x_col,
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
+    fig_line.update_layout(yaxis_title="新增报名人数", xaxis_title=x_col, hovermode="x unified")
     st.plotly_chart(fig_line, use_container_width=True)
 
-# --- 右侧：饼图计算与渲染 ---
 with chart_col2:
     if person_mode == "全体人员":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(
-            df_pie, values="新增报名数", names="人员",
-            title="🍩 全体人员招生贡献比例",
-            hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel
-        )
+        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title="🍩 全体人员招生贡献比例", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
         fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
-        
     elif person_mode == "单人独立分析":
         inv_map = {v: k for k, v in alias_map.items()}
         raw_sel_p = inv_map.get(selected_person_disp, selected_person_disp)
-        
         major_records = []
         for d in DATES:
             for major, col, val in st.session_state["daily_deltas"].get(d, []):
                 p_name = col.replace("_实际", "")
                 if p_name == raw_sel_p:
                     major_records.append({"专业/基础": major, "新增人数": val})
-        
         df_major_pie = pd.DataFrame(major_records)
         if not df_major_pie.empty:
             df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
-            fig_pie = px.pie(
-                df_major_pie, values="新增人数", names="专业/基础",
-                title=f"🍩 【{selected_person_disp}】招生成交专业构成",
-                hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3
-            )
+            fig_pie = px.pie(df_major_pie, values="新增人数", names="专业/基础", title=f"🍩 【{selected_person_disp}】招生成交专业构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
             fig_pie.update_traces(textinfo="label+percent+value")
         else:
             fig_pie = go.Figure()
             fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量招生数据")
-            
     else:
         df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(
-            df_pie, values="新增报名数", names="人员",
-            title=f"🍩 对比人员总量占比构成",
-            hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2
-        )
+        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title=f"🍩 对比人员总量占比构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
         fig_pie.update_traces(textinfo="label+percent+value")
 
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. Excel 导出功能
+# 9. 导出逻辑（包含 Excel 数据表 + Plotly 导出图表打包 Zip）
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -646,13 +564,54 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     wb.save(output)
     return output.getvalue()
 
-st.markdown("---")
-excel_bytes = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
+def build_full_export_pack(excel_bytes, fig_dict):
+    """把 Excel 和 所有分析 Plotly 图表 (PNG) 打包进 ZIP 压缩包"""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # 1. 放入 Excel
+        zip_file.writestr("2026年9月招生数据表.xlsx", excel_bytes)
+        
+        # 2. 导出并放入图片 (若系统未安装 kaleido 库则降级捕获)
+        for fig_name, fig_obj in fig_dict.items():
+            try:
+                img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
+                zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
+            except Exception:
+                # 若环境缺少 kaleido，写入导出说明提示文本
+                zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖库 (pip install kaleido)")
 
-st.download_button(
-    label="📊 导出为当前模式 Excel 表格 (.xlsx)",
-    data=excel_bytes,
-    file_name="2026年9月招生数据动态表_脱敏版.xlsx" if enable_anonymize else "2026年9月招生数据动态表_完整姓名版.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
-)
+    return zip_buffer.getvalue()
+
+st.markdown("---")
+st.markdown("### 📥 结果导出选项")
+
+excel_data = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
+
+fig_collection = {
+    "1_各人员目标实际对比柱状图": fig_person,
+    "2_Top8专业完成横柱图": fig_major,
+    "3_招生动态趋势折线图": fig_line,
+    "4_多维构成占比饼图": fig_pie,
+}
+
+zip_data = build_full_export_pack(excel_data, fig_collection)
+
+col_d1, col_d2 = st.columns(2)
+
+with col_d1:
+    st.download_button(
+        label="📊 仅导出当前模式 Excel 表格 (.xlsx)",
+        data=excel_data,
+        file_name="2026年9月招生数据动态表.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+
+with col_d2:
+    st.download_button(
+        label="📦 一键打包导出：Excel 表格 + 4张高精数据分析图表 (.zip)",
+        data=zip_data,
+        file_name="2026年9月招生看板及图表全量导出包.zip",
+        mime="application/zip",
+        use_container_width=True,
+    )
