@@ -21,38 +21,28 @@ st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 侧边栏：数据管理 & 纯动物/符号代称优化
+# 2. 侧边栏：纯动物图像脱敏配置
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
 RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
-ANIMALS = ["🦊 狐狸", "🐼 熊猫", "🦁 狮子", "🐰 兔子", "🐯 老虎"]
-ANIMAL_ICONS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
+ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
 
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=True)
 
 if enable_anonymize:
-    anonymize_type = st.sidebar.radio(
-        "选择脱敏样式：",
-        ["纯动物标记 (如 🦊 狐狸)", "纯动物图标 + 姓氏 (如 🦊 覃顾问)", "仅姓氏隐去 (如 覃**)"],
-    )
-    if "纯动物标记" in anonymize_type:
-        alias_map = {p: ANIMALS[i] for i, p in enumerate(RAW_PERSONS)}
-    elif "纯动物图标 + 姓氏" in anonymize_type:
-        alias_map = {p: f"{ANIMAL_ICONS[i]} {p[0]}顾问" for i, p in enumerate(RAW_PERSONS)}
-    else:
-        alias_map = {p: f"{p[0]}**" for p in RAW_PERSONS}
+    alias_map = {p: ANIMALS[i] for i, p in enumerate(RAW_PERSONS)}
 else:
     alias_map = {p: p for p in RAW_PERSONS}
 
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
-# 展示脱敏对照提示卡片（提高管理使用体验）
+# 展示纯图像与真实姓名对照提示卡片（仅管理者可见）
 if enable_anonymize:
     with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
         mapping_df = pd.DataFrame({
             "真实姓名": RAW_PERSONS,
-            "展示代称": PERSONS
+            "展示图像": PERSONS
         })
         st.dataframe(mapping_df, hide_index=True, use_container_width=True)
 
@@ -145,7 +135,7 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 4. 录入表单优化
+# 4. 录入表单
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 快捷录入新增招生")
@@ -222,7 +212,7 @@ for c in num_cols:
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 # -----------------------------------------------------------------------------
-# 6. HTML 精美数据表格
+# 6. HTML 数据表格（表头纯动物图像）
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     rows_html = ""
@@ -267,7 +257,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
         th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
         .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: bold; }}
         .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
-        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 14px; }}
+        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 16px; }}
         .bg-total {{ background-color: #FFF2CC; font-weight: bold; }}
         .num {{ font-family: "Times New Roman", serif; }}
         .zh {{ font-family: SimSun, serif; }}
@@ -325,7 +315,7 @@ html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, R
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化图表展示（对比柱图 + 鲜艳横柱图）
+# 7. 可视化图表展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础指标分析")
@@ -359,6 +349,7 @@ with c1:
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(tickfont=dict(size=16)),
         yaxis=dict(gridcolor="#E0E0E0", showline=True, linewidth=1, linecolor="#000000")
     )
     st.plotly_chart(fig_person, use_container_width=True)
@@ -366,7 +357,6 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     
-    # 横柱图使用 Bold 高对比配色，每个专业颜色独立鲜明
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
         title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
@@ -390,7 +380,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度分析（精细折线 + 饼图）
+# 8. 时间维度分析
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -442,7 +432,6 @@ with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>全体人员招生趋势 ({x_col})</b>", text="新增报名数")
-        # 保持精致线宽 2
         fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=2, marker=dict(size=6, color="#D50000"))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
@@ -509,7 +498,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出 Excel / ZIP 打包逻辑
+# 9. 导出 Excel / ZIP 打包
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -524,6 +513,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 
     FONT_TITLE = Font(name="SimSun", size=14, bold=True)
     FONT_HEADER = Font(name="SimSun", size=10, bold=True)
+    FONT_ANIMAL = Font(size=14, bold=True)
     FONT_BODY_NUM = Font(name="Times New Roman", size=10)
     FONT_BODY_ZH = Font(name="SimSun", size=10)
 
@@ -554,6 +544,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         ws.merge_cells(start_row=2, start_column=col_idx, end_row=2, end_column=col_idx + 1)
         p_cell = ws.cell(row=2, column=col_idx, value=p)
         p_cell.fill = PERSON_BG
+        p_cell.font = FONT_ANIMAL
         ws.cell(row=3, column=col_idx, value="目标")
         ws.cell(row=3, column=col_idx + 1, value="实际")
         col_idx += 2
@@ -572,7 +563,8 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell = ws.cell(row=r, column=c)
             if not cell.fill.start_color.rgb:
                 cell.fill = HEADER_BG
-            cell.font = FONT_HEADER
+            if not (r == 2 and c in range(4, 14, 2)):
+                cell.font = FONT_HEADER
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
 
