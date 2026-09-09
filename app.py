@@ -234,7 +234,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
             <td class="zh">{row['专业/基础名称']}</td>
             <td class="num">{row['目标人数']}</td>
             {person_cells}
-            <td class="num">{row['其他人员_实际'] if row['其他人员_实际'] > 0 else ''}</td>
+            <td class="num">{row['其他人员_实际'] if row['other_act'] > 0 else ''}</td>
             <td class="num">{row['目标人数']}</td>
             <td class="num">{row['实际完成']}</td>
             <td class="num">{row['与目标之差']}</td>
@@ -315,16 +315,17 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     return full_html
 
 st.markdown("### 📝 2026年9月招生数据动态表")
+# 临时修正字典读取键名
+calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 components.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化分析区域（无 Tab 页卡，全部平铺直接显示）
+# 7. 可视化分析区域（柱状图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础柱状图分析")
 
-# --- 板块 1：基础柱形图 ---
 c1, c2 = st.columns(2)
 
 with c1:
@@ -338,16 +339,24 @@ with c1:
                 x=PERSONS,
                 y=person_target_vals,
                 marker_color="#A6C8E0",
+                text=person_target_vals,
+                textposition="auto"
             ),
             go.Bar(
                 name="实际完成",
                 x=PERSONS,
                 y=person_actual_vals,
                 marker_color="#2E8B57",
+                text=person_actual_vals,
+                textposition="auto"
             ),
         ]
     )
-    fig_person.update_layout(title="各人员目标 vs 实际完成对比 (竖柱图)", barmode="group")
+    fig_person.update_layout(
+        title="各人员目标 vs 实际完成对比 (竖柱图)",
+        barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
     st.plotly_chart(fig_person, use_container_width=True)
 
 with c2:
@@ -360,33 +369,42 @@ with c2:
         title="招生完成人数 Top 8 专业/基础 (横柱图)",
         color="实际完成",
         color_continuous_scale="Viridis",
+        text="实际完成"
     )
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"})
+    fig_major.update_traces(textposition="outside")
     st.plotly_chart(fig_major, use_container_width=True)
 
+# -----------------------------------------------------------------------------
+# 8. 优化后的时间维度与趋势分析（折线图/饼图）
+# -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🔄 多维动态趋势与构成（折线图/饼图）")
+st.markdown("### 🔄 多维动态趋势与构成分析（优化版）")
 
-# --- 板块 2：多维动态折线图与饼图 ---
 ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
 
 with ctrl_c1:
-    person_mode = st.radio("选择分析人员范围：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
+    person_mode = st.radio("选择分析人员视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
 
 with ctrl_c2:
     if person_mode == "单人独立分析":
         selected_person_disp = st.selectbox("选择具体人员：", PERSONS + ["其他人员"])
     elif person_mode == "多人员对比分析":
-        selected_persons_disp = st.multiselect("选择要对比的人员：", PERSONS + ["其他人员"], default=PERSONS[:3])
+        selected_persons_disp = st.multiselect("选择对比人员：", PERSONS + ["其他人员"], default=PERSONS[:3])
     else:
         selected_person_disp = "全体人员"
 
 with ctrl_c3:
-    time_granularity = st.selectbox("选择时间维度：", ["按日期 (9月1日-9月7日)", "按星期 (星期二-星期一)", "按月份视角 (历史与当月趋势)"])
+    time_granularity = st.selectbox(
+        "选择时间汇总粒度：",
+        ["按按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"]
+    )
 
+# 构建基础流水数据集
 time_records = []
 for d_idx, d in enumerate(DATES):
     w = WEEKDAYS[d_idx]
+    is_weekend = "周末" if w in ["星期六", "星期日"] else "工作日"
     d_dict = {p: 0 for p in RAW_PERSONS + ["其他人员"]}
     for major, col, val in st.session_state["daily_deltas"].get(d, []):
         p_name = col.replace("_实际", "")
@@ -397,6 +415,7 @@ for d_idx, d in enumerate(DATES):
         time_records.append({
             "日期": d,
             "星期": w,
+            "类型": is_weekend,
             "月份": "2026年9月",
             "人员": disp_p_name,
             "新增报名数": val
@@ -404,49 +423,76 @@ for d_idx, d in enumerate(DATES):
 
 df_time_series = pd.DataFrame(time_records)
 
+# 粒度计算与 X 轴控制
+if "按日明细" in time_granularity:
+    x_col = "日期"
+    category_order = DATES
+elif "工作日/周末" in time_granularity:
+    x_col = "星期"
+    category_order = WEEKDAYS
+else:
+    x_col = "月份"
+    category_order = ["2026年9月"]
+
 chart_col1, chart_col2 = st.columns(2)
 
+# --- 左侧：折线图计算与渲染 ---
 with chart_col1:
-    x_col = "日期" if "日期" in time_granularity else ("星期" if "星期" in time_granularity else "月份")
-    
     if person_mode == "全体人员":
-        df_chart_line = df_time_series.groupby(x_col)["新增报名数"].sum().reset_index()
+        df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(
             df_chart_line, x=x_col, y="新增报名数", markers=True,
-            title=f"【全体人员】报名趋势折线图 ({time_granularity})",
-            text="新增报名数"
+            title=f"📈 全体人员招生趋势 ({x_col}维度)", text="新增报名数"
         )
-        fig_line.update_traces(textposition="top center", line_color="#2E8B57", line_width=3)
+        fig_line.update_traces(
+            textposition="top center",
+            line_color="#2E8B57",
+            line_width=3,
+            marker=dict(size=8)
+        )
         
     elif person_mode == "单人独立分析":
-        df_chart_line = df_time_series[df_time_series["人员"] == selected_person_disp].groupby(x_col)["新增报名数"].sum().reset_index()
+        df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
+        df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
         fig_line = px.line(
             df_chart_line, x=x_col, y="新增报名数", markers=True,
-            title=f"【{selected_person_disp}】个人报名趋势折线图 ({time_granularity})",
-            text="新增报名数"
+            title=f"📈 【{selected_person_disp}】个人趋势 ({x_col}维度)", text="新增报名数"
         )
-        fig_line.update_traces(textposition="top center", line_color="#1F77B4", line_width=3)
+        fig_line.update_traces(
+            textposition="top center",
+            line_color="#1F77B4",
+            line_width=3,
+            marker=dict(size=8)
+        )
         
     else:
-        df_chart_line = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby([x_col, "人员"])["新增报名数"].sum().reset_index()
+        df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
+        df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
         fig_line = px.line(
             df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True,
-            title=f"【多人员对比】报名趋势折线图 ({time_granularity})"
+            title=f"📈 多人招生趋势对比 ({x_col}维度)"
         )
-        fig_line.update_traces(line_width=2.5)
+        fig_line.update_traces(line_width=2.5, marker=dict(size=6))
 
-    fig_line.update_layout(yaxis_title="新增报名人数", xaxis_title=x_col)
+    fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
+    fig_line.update_layout(
+        yaxis_title="新增报名人数",
+        xaxis_title=x_col,
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
     st.plotly_chart(fig_line, use_container_width=True)
 
+# --- 右侧：饼图计算与渲染 ---
 with chart_col2:
     if person_mode == "全体人员":
-        df_pie = df_time_series.groupby("人员")["新增报名数"].sum().reset_index()
+        df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
         fig_pie = px.pie(
             df_pie, values="新增报名数", names="人员",
-            title="【全体人员】累计招生贡献占比饼图",
-            hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel
+            title="🍩 全体人员招生贡献比例",
+            hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel
         )
-        fig_pie.update_traces(textinfo="label+percent+value")
+        fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
         
     elif person_mode == "单人独立分析":
         inv_map = {v: k for k, v in alias_map.items()}
@@ -461,30 +507,30 @@ with chart_col2:
         
         df_major_pie = pd.DataFrame(major_records)
         if not df_major_pie.empty:
-            df_major_pie = df_major_pie.groupby("专业/基础")["新增人数"].sum().reset_index()
+            df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
             fig_pie = px.pie(
                 df_major_pie, values="新增人数", names="专业/基础",
-                title=f"【{selected_person_disp}】招生专业分布构成饼图",
-                hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3
+                title=f"🍩 【{selected_person_disp}】招生成交专业构成",
+                hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3
             )
             fig_pie.update_traces(textinfo="label+percent+value")
         else:
             fig_pie = go.Figure()
-            fig_pie.update_layout(title=f"【{selected_person_disp}】暂无招生数据录入")
+            fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量招生数据")
             
     else:
-        df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员")["新增报名数"].sum().reset_index()
+        df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
         fig_pie = px.pie(
             df_pie, values="新增报名数", names="人员",
-            title=f"【选中多人员】业绩总量构成占比饼图",
-            hole=0.3, color_discrete_sequence=px.colors.qualitative.Set2
+            title=f"🍩 对比人员总量占比构成",
+            hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2
         )
         fig_pie.update_traces(textinfo="label+percent+value")
 
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. Excel 导出功能
+# 9. Excel 导出功能
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
