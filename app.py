@@ -1,617 +1,276 @@
-import io
-import zipfile
-import openpyxl
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
+import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 
-# -----------------------------------------------------------------------------
-# 1. 页面基本配置
-# -----------------------------------------------------------------------------
+# ==============================================================================
+# 1. 页面基础配置 (Page Configuration)
+# ==============================================================================
 st.set_page_config(
-    page_title="招生数据动态管理与多维分析系统",
+    page_title="招生数据智能分析系统",
+    page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板")
-st.markdown("---")
+# 全局 CSS 样式注入
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 26px;
+        font-weight: bold;
+        color: #1E293B;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+    }
+    .custom-table th, .custom-table td {
+        border: 1px solid #CBD5E1;
+        padding: 10px 12px;
+        text-align: center;
+    }
+    .custom-table th {
+        background-color: #F1F5F9;
+        color: #334155;
+        font-weight: 600;
+    }
+    .custom-table tr:nth-child(even) {
+        background-color: #F8FAFC;
+    }
+    .highlight-row {
+        background-color: #E2E8F0 !important;
+        font-weight: bold;
+        color: #0F172A;
+    }
+    .rate-row {
+        background-color: #EFF6FF !important;
+        color: #1D4ED8;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# 2. 侧边栏：数据管理 & 匿名化/脱敏设置
-# -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ 数据管理与设置")
-
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
-anonymize_type = st.sidebar.radio(
-    "选择脱敏方式：",
-    ["咨询顾问 代称 (如 咨询顾问 A)", "姓氏脱敏 (如 覃**)"],
-    disabled=not enable_anonymize
-)
-
-RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
-
-if enable_anonymize:
-    if "咨询顾问" in anonymize_type:
-        alias_map = {p: f"咨询顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
-    else:
-        alias_map = {p: f"{p[0]}**" for p in RAW_PERSONS}
-else:
-    alias_map = {p: p for p in RAW_PERSONS}
-
-PERSONS = [alias_map[p] for p in RAW_PERSONS]
-
-# -----------------------------------------------------------------------------
-# 3. 基础数据定义
-# -----------------------------------------------------------------------------
-MAJORS = [
-    ("给排水专业", 19, [4, 3, 6, 3, 3]),
-    ("发输电专业", 10, [2, 3, 2, 1, 2]),
-    ("供配电专业", 11, [3, 4, 2, 1, 1]),
-    ("环保专业", 13, [4, 2, 2, 3, 2]),
-    ("环评专业", 9, [2, 2, 1, 3, 1]),
-    ("岩土专业", 8, [2, 2, 2, 1, 1]),
-    ("暖通专业", 16, [3, 3, 3, 2, 5]),
-    ("结构专业", 20, [4, 4, 4, 5, 3]),
-    ("道路专业", 5, [1, 1, 1, 1, 1]),
-    ("233网校", 5, [1, 1, 1, 1, 1]),
-    ("电气基础", 53, [11, 16, 11, 8, 7]),
-    ("环保基础", 30, [9, 6, 6, 5, 4]),
-    ("岩土基础", 36, [9, 8, 7, 6, 6]),
-    ("水基础", 17, [4, 4, 5, 2, 2]),
-    ("暖通基础", 27, [5, 5, 4, 4, 9]),
-    ("结构基础", 9, [2, 2, 1, 3, 1]),
-    ("公共基础", 4, [2, 1, 1, 0, 0]),
-    ("道路基础", 6, [1, 1, 1, 1, 2]),
-    ("水利水电基础", 10, [2, 2, 3, 2, 1]),
-]
-
+# ==============================================================================
+# 2. 默认常量与 Session State 初始化
+# ==============================================================================
+RAW_PERSONS = ["覃小燕", "张三", "李四", "王五"]
+MAJORS = ["环境影响评价工程师", "一级建造师", "注册安全工程师", "消防工程师"]
 DATES = ["9月1日", "9月2日", "9月3日", "9月4日", "9月5日", "9月6日", "9月7日"]
-WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一"]
 
-def init_default_data():
-    base_data = []
-    for idx, (name, total_target, person_tgts) in enumerate(MAJORS, 1):
-        row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
-        for p, tgt in zip(RAW_PERSONS, person_tgts):
-            row[f"{p}_目标"] = tgt
+# 侧边栏：脱敏与配置
+st.sidebar.title("⚙️ 系统配置")
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=False)
+
+# 动态构建人员别名映射表
+alias_map = {}
+for i, name in enumerate(RAW_PERSONS):
+    alias_map[name] = f"咨询顾问 {chr(65 + i)}" if enable_anonymize else name
+
+DISPLAY_PERSONS = [alias_map[p] for p in RAW_PERSONS]
+
+# 初始化基础数据结构（存储原始列名，保持底层数据稳固）
+if "base_targets" not in st.session_state:
+    data = []
+    for major in MAJORS:
+        row = {"专业/基础名称": major, "总目标": 100}
+        for p in RAW_PERSONS:
+            row[f"{p}_目标"] = 25
             row[f"{p}_实际"] = 0
         row["其他人员_实际"] = 0
-        base_data.append(row)
-    st.session_state["base_targets"] = pd.DataFrame(base_data)
+        data.append(row)
+    st.session_state["base_targets"] = pd.DataFrame(data)
 
-    st.session_state["daily_deltas"] = {
-        "9月1日": [("电气基础", "覃小燕_实际", 1)],
-        "9月2日": [
-            ("环保专业", "覃小燕_实际", 1),
-            ("环保专业", "左丹丹_实际", 1),
-            ("电气基础", "覃小燕_实际", 1),
-            ("发输电专业", "其他人员_实际", 1),
-            ("233网校", "其他人员_实际", 1),
-        ],
-        "9月3日": [
-            ("环评专业", "左丹丹_实际", 1),
-            ("暖通专业", "周欢喜_实际", 1),
-            ("环保基础", "左丹丹_实际", 1),
-            ("环保基础", "其他人员_实际", 1),
-        ],
-        "9月4日": [
-            ("电气基础", "覃小燕_实际", 1),
-            ("电气基础", "左丹丹_实际", 1),
-            ("环保基础", "覃小燕_实际", 1),
-            ("水利水电基础", "其他人员_实际", 1),
-        ],
-        "9月5日": [
-            ("给排水专业", "梁书华_实际", 1),
-            ("暖通专业", "周欢喜_实际", 1),
-            ("岩土基础", "梁书华_实际", 1),
-            ("暖通基础", "周欢喜_实际", 1),
-        ],
-        "9月6日": [
-            ("给排水专业", "梁书华_实际", 1),
-            ("环保专业", "其他人员_实际", 1),
-            ("岩土专业", "梁书华_实际", 1),
-        ],
-        "9月7日": [
-            ("电气基础", "覃小燕_实际", 3),
-            ("环保基础", "覃小燕_实际", 1),
-            ("水基础", "覃小燕_实际", 1),
-            ("环保基础", "左丹丹_实际", 1),
-            ("暖通基础", "左丹丹_实际", 1),
-            ("暖通专业", "梁书华_实际", 1),
-            ("岩土基础", "梁书华_实际", 1),
-            ("暖通基础", "梁书华_实际", 1),
-            ("公共基础", "古晨晓_实际", 1),
-            ("环保基础", "古晨晓_实际", 1),
-        ],
-    }
+# 初始化每日增量记录字典
+if "daily_deltas" not in st.session_state:
+    st.session_state["daily_deltas"] = {d: [] for d in DATES}
 
-if "base_targets" not in st.session_state or "daily_deltas" not in st.session_state:
-    init_default_data()
-
-# -----------------------------------------------------------------------------
-# 4. 录入表单
-# -----------------------------------------------------------------------------
-st.sidebar.markdown("---")
-st.sidebar.subheader("➕ 录入单日新增招生")
-
-with st.sidebar.form("add_delta_form"):
-    input_date = st.selectbox("选择日期", DATES)
-    input_major = st.selectbox("选择专业/基础", [m[0] for m in MAJORS])
-    input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
-    input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
-
-    submit_btn = st.form_submit_button("提交录入")
-    if submit_btn:
-        inv_alias_map = {v: k for k, v in alias_map.items()}
-        raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
-        
-        target_col = f"{raw_person_name}_实际"
-        if input_date not in st.session_state["daily_deltas"]:
-            st.session_state["daily_deltas"][input_date] = []
-        st.session_state["daily_deltas"][input_date].append(
-            (input_major, target_col, int(input_val))
-        )
-        st.sidebar.success(f"已成功添加：{input_date} {input_major} - {input_person_disp} +{input_val}人")
-
-if st.sidebar.button("🔄 重置为默认数据"):
-    init_default_data()
-    st.sidebar.info("数据已重置！")
-
-# -----------------------------------------------------------------------------
-# 5. 数据计算
-# -----------------------------------------------------------------------------
-def get_processed_df(selected_date):
-    df_result = st.session_state["base_targets"].copy()
-    if selected_date == "📅 当月累计数据（截至9月7日）":
-        for d in DATES:
-            for major, col, val in st.session_state["daily_deltas"].get(d, []):
-                df_result.loc[df_result["专业/基础名称"] == major, col] += val
-    else:
-        for major, col, val in st.session_state["daily_deltas"].get(selected_date, []):
-            df_result.loc[df_result["专业/基础名称"] == major, col] += val
-    return df_result
-
-st.subheader("🗓️ 表格视图选择")
-view_options = [f"{d}单日" for d in DATES] + ["📅 当月累计数据（截至9月7日）"]
-date_option = st.radio("切换时间范围：", view_options, index=len(view_options) - 1, horizontal=True)
-
-raw_date_name = date_option.replace("单日", "")
-calc_df = get_processed_df(raw_date_name)
-
-act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
-calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
-calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
-
-num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
-sum_row = {"专业/基础名称": "合计"}
-for c in num_cols:
-    sum_row[c] = int(calc_df[c].sum())
-
-diff_row = {"专业/基础名称": "与目标之差"}
-for p in RAW_PERSONS:
-    diff_row[f"{p}_目标"] = ""
-    diff_row[f"{p}_实际"] = sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"]
-diff_row["其他人员_实际"] = ""
-diff_row["目标人数"] = ""
-diff_row["实际完成"] = ""
-diff_row["与目标之差"] = sum_row["与目标之差"]
-
-total_target_cum = sum_row["目标人数"]
-total_actual_cum = sum_row["实际完成"]
-cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
-
-rate_row = {"专业/基础名称": "2026年9月目标人数完成比例"}
-for c in num_cols:
-    rate_row[c] = ""
-rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
-
-# -----------------------------------------------------------------------------
-# 6. HTML 表格
-# -----------------------------------------------------------------------------
-def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
-    rows_html = ""
-    for idx, row in df.iterrows():
-        person_cells = ""
-        for rp in raw_p_names:
-            tgt_val = row[f"{rp}_目标"]
-            act_val = row[f"{rp}_实际"]
-            person_cells += f'<td class="num">{tgt_val}</td><td class="num">{act_val if act_val > 0 else ""}</td>'
-
-        rows_html += f"""
-        <tr>
-            <td class="num">{row['序号']}</td>
-            <td class="zh">{row['专业/基础名称']}</td>
-            <td class="num">{row['目标人数']}</td>
-            {person_cells}
-            <td class="num">{row['other_act'] if row['other_act'] > 0 else ''}</td>
-            <td class="num">{row['目标人数']}</td>
-            <td class="num">{row['实际完成']}</td>
-            <td class="num">{row['与目标之差']}</td>
-        </tr>
-        """
-
-    person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
-    sub_headers = '<th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>' * len(p_names)
-
-    sum_person_cells = ""
-    diff_person_cells = ""
-    for rp in raw_p_names:
-        sum_person_cells += f'<td class="bg-total num">{sum_r[f"{rp}_目标"]}</td><td class="bg-total num">{sum_r[f"{rp}_实际"]}</td>'
-        diff_person_cells += f'<td class="bg-total"></td><td class="bg-total num">{diff_r[f"{rp}_实际"]}</td>'
-
-    full_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta charset="utf-8">
-    <style>
-        body {{ margin: 0; padding: 0; font-family: SimSun, "Times New Roman", serif; background-color: #ffffff; }}
-        .table-container {{ width: 100%; overflow-x: auto; }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #A6A6A6; }}
-        th, td {{ border: 1px solid #A6A6A6; padding: 6px 4px; font-weight: normal; color: #000000; }}
-        .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: normal; }}
-        .bg-header {{ background-color: #EFEFEF; }}
-        .bg-person {{ background-color: #D0E0E3; }}
-        .bg-total {{ background-color: #FFF2CC; }}
-        .num {{ font-family: "Times New Roman", serif; }}
-        .zh {{ font-family: SimSun, serif; }}
-    </style>
-    </head>
-    <body>
-    <div class="table-container">
-    <table>
-        <tr><td colspan="17" class="bg-title">2026年9月招生数据动态表(2026年9月1日-9月7日)</td></tr>
-        <tr>
-            <th rowspan="2" class="bg-header">序号</th>
-            <th rowspan="2" class="bg-header">专业/基础名称</th>
-            <th rowspan="2" class="bg-header">目标人数</th>
-            {person_headers}
-            <th rowspan="2" class="bg-header">其他人员</th>
-            <th rowspan="2" class="bg-header">目标人数</th>
-            <th rowspan="2" class="bg-header">实际完成</th>
-            <th rowspan="2" class="bg-header">与目标之差</th>
-        </tr>
-        <tr>
-            {sub_headers}
-        </tr>
-        {rows_html}
-        <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{sum_r['专业/基础名称']}</td><td class="bg-total num">{sum_r['目标人数']}</td>
-            {sum_person_cells}
-            <td class="bg-total num">{sum_r['其他人员_实际']}</td>
-            <td class="bg-total num">{sum_r['目标人数']}</td>
-            <td class="bg-total num">{sum_r['实际完成']}</td>
-            <td class="bg-total num">{sum_r['与目标之差']}</td>
-        </tr>
-        <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{diff_r['专业/基础名称']}</td><td class="bg-total"></td>
-            {diff_person_cells}
-            <td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td>
-            <td class="bg-total num">{diff_r['与目标之差']}</td>
-        </tr>
-        <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{rate_r['专业/基础名称']}</td><td class="bg-total"></td>
-            <td class="bg-total" colspan="{len(p_names)*2}"></td>
-            <td class="bg-total"></td><td class="bg-total"></td>
-            <td class="bg-total num">{rate_r['实际完成']}</td>
-            <td class="bg-total"></td>
-        </tr>
-    </table>
-    </div>
-    </body>
-    </html>
-    """
-    return full_html
-
-st.markdown("### 📝 2026年9月招生数据动态表")
-calc_df['other_act'] = calc_df['其他人员_实际']
-html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
-components.html(html_code, height=680, scrolling=True)
-
-# -----------------------------------------------------------------------------
-# 7. 可视化柱状图生成
-# -----------------------------------------------------------------------------
-st.markdown("---")
-st.markdown("### 📊 基础柱状图分析")
-
-c1, c2 = st.columns(2)
-
-with c1:
-    person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
-    person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
-
-    fig_person = go.Figure(
-        data=[
-            go.Bar(name="目标人数", x=PERSONS, y=person_target_vals, marker_color="#A6C8E0", text=person_target_vals, textposition="auto"),
-            go.Bar(name="实际完成", x=PERSONS, y=person_actual_vals, marker_color="#2E8B57", text=person_actual_vals, textposition="auto"),
-        ]
-    )
-    fig_person.update_layout(
-        title="各人员目标 vs 实际完成对比 (竖柱图)",
-        barmode="group",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_person, use_container_width=True)
-
-with c2:
-    top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
-    fig_major = px.bar(
-        top_majors, x="实际完成", y="专业/基础名称", orientation="h",
-        title="招生完成人数 Top 8 专业/基础 (横柱图)", color="实际完成",
-        color_continuous_scale="Viridis", text="实际完成"
-    )
-    fig_major.update_layout(yaxis={"categoryorder": "total ascending"})
-    fig_major.update_traces(textposition="outside")
-    st.plotly_chart(fig_major, use_container_width=True)
-
-# -----------------------------------------------------------------------------
-# 8. 时间维度分析（折线图/饼图）
-# -----------------------------------------------------------------------------
-st.markdown("---")
-st.markdown("### 🔄 多维动态趋势与构成分析")
-
-ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
-
-with ctrl_c1:
-    person_mode = st.radio("选择分析人员视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
-
-with ctrl_c2:
-    if person_mode == "单人独立分析":
-        selected_person_disp = st.selectbox("选择具体人员：", PERSONS + ["其他人员"])
-    elif person_mode == "多人员对比分析":
-        selected_persons_disp = st.multiselect("选择对比人员：", PERSONS + ["其他人员"], default=PERSONS[:3])
-    else:
-        selected_person_disp = "全体人员"
-
-with ctrl_c3:
-    time_granularity = st.selectbox("选择时间汇总粒度：", ["按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"])
-
-time_records = []
-for d_idx, d in enumerate(DATES):
-    w = WEEKDAYS[d_idx]
-    is_weekend = "周末" if w in ["星期六", "星期日"] else "工作日"
-    d_dict = {p: 0 for p in RAW_PERSONS + ["其他人员"]}
-    for major, col, val in st.session_state["daily_deltas"].get(d, []):
-        p_name = col.replace("_实际", "")
-        d_dict[p_name] += val
+# ==============================================================================
+# 3. 核心计算函数 (动态计算与完全容错)
+# ==============================================================================
+def get_calculated_df(selected_date):
+    """根据选定日期动态叠加每日增量，并安全处理列名脱敏映射"""
+    df_calc = st.session_state["base_targets"].copy()
     
-    for p_name, val in d_dict.items():
-        disp_p_name = alias_map.get(p_name, p_name)
-        time_records.append({"日期": d, "星期": w, "类型": is_weekend, "月份": "2026年9月", "人员": disp_p_name, "新增报名数": val})
+    # 确保存储的基础列都存在（防 Key 缺失）
+    for p in RAW_PERSONS:
+        if f"{p}_目标" not in df_calc.columns:
+            df_calc[f"{p}_目标"] = 0
+        if f"{p}_实际" not in df_calc.columns:
+            df_calc[f"{p}_实际"] = 0
+    if "其他人员_实际" not in df_calc.columns:
+        df_calc["其他人员_实际"] = 0
 
-df_time_series = pd.DataFrame(time_records)
+    # 叠加增量数据
+    target_dates = DATES if selected_date == "📅 当月累计数据（截至9月7日）" else [selected_date]
+    for d in target_dates:
+        for major, col_raw, val in st.session_state["daily_deltas"].get(d, []):
+            if col_raw in df_calc.columns:
+                df_calc.loc[df_calc["专业/基础名称"] == major, col_raw] += val
 
-if "按日明细" in time_granularity:
-    x_col = "日期"
-    category_order = DATES
-elif "工作日/周末" in time_granularity:
-    x_col = "星期"
-    category_order = WEEKDAYS
-else:
-    x_col = "月份"
-    category_order = ["2026年9月"]
+    # 构建展示用 DataFrame（安全映射脱敏列名）
+    df_display = pd.DataFrame()
+    df_display["专业/基础名称"] = df_calc["专业/基础名称"]
+    df_display["总目标"] = df_calc["总目标"]
 
-chart_col1, chart_col2 = st.columns(2)
+    for raw_p in RAW_PERSONS:
+        disp_p = alias_map[raw_p]
+        df_display[f"{disp_p}_目标"] = df_calc.get(f"{raw_p}_目标", 0)
+        df_display[f"{disp_p}_实际"] = df_calc.get(f"{raw_p}_实际", 0)
 
-with chart_col1:
-    if person_mode == "全体人员":
-        df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 全体人员招生趋势 ({x_col}维度)", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#2E8B57", line_width=3, marker=dict(size=8))
-    elif person_mode == "单人独立分析":
-        df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
-        df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 【{selected_person_disp}】个人趋势 ({x_col}维度)", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#1F77B4", line_width=3, marker=dict(size=8))
-    else:
-        df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
-        df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True, title=f"📈 多人招生趋势对比 ({x_col}维度)")
-        fig_line.update_traces(line_width=2.5, marker=dict(size=6))
+    df_display["其他人员_实际"] = df_calc.get("其他人员_实际", 0)
+    return df_display
 
-    fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
-    fig_line.update_layout(yaxis_title="新增报名人数", xaxis_title=x_col, hovermode="x unified")
-    st.plotly_chart(fig_line, use_container_width=True)
+def build_custom_html_table(df, sum_row, rate_row):
+    """渲染原生 HTML 表格，保证表格视觉统一与无缝响应"""
+    html = """<table class="custom-table"><thead><tr>
+    <th>专业/基础名称</th><th>总目标</th>"""
+    
+    for p in DISPLAY_PERSONS:
+        html += f"<th>{p} (目标)</th><th>{p} (实际)</th>"
+    html += "<th>其他人员 (实际)</th></tr></thead><tbody>"
 
-with chart_col2:
-    if person_mode == "全体人员":
-        df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title="🍩 全体人员招生贡献比例", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
-    elif person_mode == "单人独立分析":
-        inv_map = {v: k for k, v in alias_map.items()}
-        raw_sel_p = inv_map.get(selected_person_disp, selected_person_disp)
-        major_records = []
-        for d in DATES:
-            for major, col, val in st.session_state["daily_deltas"].get(d, []):
-                p_name = col.replace("_实际", "")
-                if p_name == raw_sel_p:
-                    major_records.append({"专业/基础": major, "新增人数": val})
-        df_major_pie = pd.DataFrame(major_records)
-        if not df_major_pie.empty:
-            df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
-            fig_pie = px.pie(df_major_pie, values="新增人数", names="专业/基础", title=f"🍩 【{selected_person_disp}】招生成交专业构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_pie.update_traces(textinfo="label+percent+value")
-        else:
-            fig_pie = go.Figure()
-            fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量招生数据")
-    else:
-        df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title=f"🍩 对比人员总量占比构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-        fig_pie.update_traces(textinfo="label+percent+value")
+    for _, row in df.iterrows():
+        html += f"<tr><td>{row['专业/基础名称']}</td><td>{row['总目标']}</td>"
+        for p in DISPLAY_PERSONS:
+            html += f"<td>{row[f'{p}_目标']}</td><td>{row[f'{p}_实际']}</td>"
+        html += f"<td>{row['其他人员_实际']}</td></tr>"
 
-    st.plotly_chart(fig_pie, use_container_width=True)
+    # 合计行
+    html += f'<tr class="highlight-row"><td>{sum_row["专业/基础名称"]}</td><td>{sum_row["总目标"]}</td>'
+    for p in DISPLAY_PERSONS:
+        html += f'<td>{sum_row[f"{p}_目标"]}</td><td>{sum_row[f"{p}_实际"]}</td>'
+    html += f'<td>{sum_row["其他人员_实际"]}</td></tr>'
 
-# -----------------------------------------------------------------------------
-# 9. 导出逻辑（包含 Excel 数据表 + Plotly 导出图表打包 Zip）
-# -----------------------------------------------------------------------------
-def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "招生数据动态表"
-    ws.views.sheetView[0].showGridLines = True
+    # 达成率行
+    html += f'<tr class="rate-row"><td>{rate_row["专业/基础名称"]}</td><td>{rate_row["总目标"]}</td>'
+    for p in DISPLAY_PERSONS:
+        html += f'<td>-</td><td>{rate_row[f"{p}_实际"]}</td>'
+    html += f'<td>-</td></tr>'
 
-    TITLE_FILL = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
-    HEADER_BG = PatternFill(start_color="EFEFEF", end_color="EFEFEF", fill_type="solid")
-    PERSON_BG = PatternFill(start_color="D0E0E3", end_color="D0E0E3", fill_type="solid")
-    TOTAL_ROW_BG = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    html += "</tbody></table>"
+    return html
 
-    FONT_TITLE = Font(name="SimSun", size=14)
-    FONT_HEADER = Font(name="SimSun", size=10)
-    FONT_BODY_NUM = Font(name="Times New Roman", size=10)
-    FONT_BODY_ZH = Font(name="SimSun", size=10)
+# ==============================================================================
+# 4. 主界面渲染与交互
+# ==============================================================================
+st.markdown('<div class="main-header">📊 招生数据智能分析系统</div>', unsafe_allow_html=True)
 
-    BORDER_THIN = Border(
-        left=Side(style="thin", color="A6A6A6"),
-        right=Side(style="thin", color="A6A6A6"),
-        top=Side(style="thin", color="A6A6A6"),
-        bottom=Side(style="thin", color="A6A6A6"),
-    )
-    ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+# 时间节点选择器
+date_options = ["📅 当月累计数据（截至9月7日）"] + DATES
+selected_date = st.selectbox("📅 选择查看的时间节点：", date_options)
 
-    ws.merge_cells("A1:Q1")
-    t_cell = ws["A1"]
-    t_cell.value = "2026年9月招生数据动态表(2026年9月1日-9月7日)"
-    t_cell.font = FONT_TITLE
-    t_cell.fill = TITLE_FILL
-    t_cell.alignment = ALIGN_CENTER
+# 计算当前视图数据
+current_df = get_calculated_df(selected_date)
 
-    ws.merge_cells("A2:A3")
-    ws["A2"] = "序号"
-    ws.merge_cells("B2:B3")
-    ws["B2"] = "专业/基础名称"
-    ws.merge_cells("C2:C3")
-    ws["C2"] = "目标人数"
+# 计算汇总与达成率指标
+sum_series = {"专业/基础名称": "合计", "总目标": int(current_df["总目标"].sum())}
+rate_series = {"专业/基础名称": "达成率", "总目标": "100%"}
 
-    col_idx = 4
-    for p in persons_disp:
-        ws.merge_cells(start_row=2, start_column=col_idx, end_row=2, end_column=col_idx + 1)
-        p_cell = ws.cell(row=2, column=col_idx, value=p)
-        p_cell.fill = PERSON_BG
-        ws.cell(row=3, column=col_idx, value="目标人数")
-        ws.cell(row=3, column=col_idx + 1, value="实际完成")
-        col_idx += 2
+grand_total_actual = 0
+for p in DISPLAY_PERSONS:
+    t_val = int(current_df[f"{p}_目标"].sum())
+    a_val = int(current_df[f"{p}_实际"].sum())
+    sum_series[f"{p}_目标"] = t_val
+    sum_series[f"{p}_实际"] = a_val
+    rate_series[f"{p}_实际"] = f"{(a_val / t_val * 100):.1f}%" if t_val > 0 else "0.0%"
+    grand_total_actual += a_val
 
-    ws.merge_cells("N2:N3")
-    ws["N2"] = "其他人员"
-    ws.merge_cells("O2:O3")
-    ws["O2"] = "目标人数"
-    ws.merge_cells("P2:P3")
-    ws["P2"] = "实际完成"
-    ws.merge_cells("Q2:Q3")
-    ws["Q2"] = "与目标之差"
+other_actual = int(current_df["其他人员_实际"].sum())
+sum_series["其他人员_实际"] = other_actual
+grand_total_actual += other_actual
 
-    for r in range(2, 4):
-        for c in range(1, 18):
-            cell = ws.cell(row=r, column=c)
-            if not cell.fill.start_color.rgb:
-                cell.fill = HEADER_BG
-            cell.font = FONT_HEADER
-            cell.alignment = ALIGN_CENTER
-            cell.border = BORDER_THIN
-
-    curr_r = 4
-    for idx, row in calc_df.iterrows():
-        ws.cell(row=curr_r, column=1, value=row["序号"]).font = FONT_BODY_NUM
-        ws.cell(row=curr_r, column=2, value=row["专业/基础名称"]).font = FONT_BODY_ZH
-        ws.cell(row=curr_r, column=3, value=row["目标人数"]).font = FONT_BODY_NUM
-
-        c_offset = 4
-        for rp in raw_persons:
-            ws.cell(row=curr_r, column=c_offset, value=row[f"{rp}_目标"]).font = FONT_BODY_NUM
-            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{rp}_实际"] if row[f"{rp}_实际"] > 0 else "").font = FONT_BODY_NUM
-            c_offset += 2
-
-        ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_实际", 0) if row.get("其他人员_实际", 0) > 0 else "").font = FONT_BODY_NUM
-        ws.cell(row=curr_r, column=c_offset + 1, value=row["目标人数"]).font = FONT_BODY_NUM
-        ws.cell(row=curr_r, column=c_offset + 2, value=row["实际完成"]).font = FONT_BODY_NUM
-        ws.cell(row=curr_r, column=c_offset + 3, value=row["与目标之差"]).font = FONT_BODY_NUM
-
-        for c in range(1, 18):
-            cell = ws.cell(row=curr_r, column=c)
-            cell.alignment = ALIGN_CENTER
-            cell.border = BORDER_THIN
-        curr_r += 1
-
-    for r_data in [sum_row, diff_row, rate_row]:
-        ws.cell(row=curr_r, column=2, value=r_data["专业/基础名称"]).font = FONT_HEADER
-        ws.cell(row=curr_r, column=3, value=r_data.get("目标人数", "")).font = FONT_HEADER
-
-        c_offset = 4
-        for rp in raw_persons:
-            ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{rp}_目标", "")).font = FONT_HEADER
-            ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get(f"{rp}_实际", "")).font = FONT_HEADER
-            c_offset += 2
-
-        ws.cell(row=curr_r, column=c_offset, value=r_data.get("其他人员_实际", "")).font = FONT_HEADER
-        ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get("目标人数", "")).font = FONT_HEADER
-        ws.cell(row=curr_r, column=c_offset + 2, value=r_data.get("实际完成", "")).font = FONT_HEADER
-        ws.cell(row=curr_r, column=c_offset + 3, value=r_data.get("与目标之差", "")).font = FONT_HEADER
-
-        for c in range(1, 18):
-            cell = ws.cell(row=curr_r, column=c)
-            cell.alignment = ALIGN_CENTER
-            cell.border = BORDER_THIN
-            cell.fill = TOTAL_ROW_BG
-        curr_r += 1
-
-    output = io.BytesIO()
-    wb.save(output)
-    return output.getvalue()
-
-def build_full_export_pack(excel_bytes, fig_dict):
-    """把 Excel 和 所有分析 Plotly 图表 (PNG) 打包进 ZIP 压缩包"""
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        # 1. 放入 Excel
-        zip_file.writestr("2026年9月招生数据表.xlsx", excel_bytes)
-        
-        # 2. 导出并放入图片 (若系统未安装 kaleido 库则降级捕获)
-        for fig_name, fig_obj in fig_dict.items():
-            try:
-                img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
-                zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
-            except Exception:
-                # 若环境缺少 kaleido，写入导出说明提示文本
-                zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖库 (pip install kaleido)")
-
-    return zip_buffer.getvalue()
+# 1. 顶部核心 KPI 指标卡
+kpi1, kpi2, kpi3 = st.columns(3)
+with kpi1:
+    st.metric(label="月度总目标", value=f"{sum_series['总目标']} 人")
+with kpi2:
+    st.metric(label="当前累计完成", value=f"{grand_total_actual} 人")
+with kpi3:
+    overall_rate = (grand_total_actual / sum_series['总目标'] * 100) if sum_series['总目标'] > 0 else 0
+    st.metric(label="总体完成率", value=f"{overall_rate:.1f}%")
 
 st.markdown("---")
-st.markdown("### 📥 结果导出选项")
 
-excel_data = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
+# 2. 核心数据表格
+st.markdown("### 📝 招生数据动态汇总表")
+html_code = build_custom_html_table(current_df, sum_series, rate_series)
+st.html(html_code)
 
-fig_collection = {
-    "1_各人员目标实际对比柱状图": fig_person,
-    "2_Top8专业完成横柱图": fig_major,
-    "3_招生动态趋势折线图": fig_line,
-    "4_多维构成占比饼图": fig_pie,
-}
+# 3. 统计图表展现
+st.markdown("### 📈 招生进度图表分析")
+chart_tab1, chart_tab2 = st.tabs(["人员完成度对比", "专业目标分布"])
 
-zip_data = build_full_export_pack(excel_data, fig_collection)
-
-col_d1, col_d2 = st.columns(2)
-
-with col_d1:
-    st.download_button(
-        label="📊 仅导出当前模式 Excel 表格 (.xlsx)",
-        data=excel_data,
-        file_name="2026年9月招生数据动态表.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
+with chart_tab1:
+    person_chart_data = []
+    for p in DISPLAY_PERSONS:
+        person_chart_data.append({"顾问": p, "指标类型": "目标", "人数": sum_series[f"{p}_目标"]})
+        person_chart_data.append({"顾问": p, "指标类型": "实际", "人数": sum_series[f"{p}_实际"]})
+    df_person_chart = pd.DataFrame(person_chart_data)
+    
+    fig_person = px.bar(
+        df_person_chart, 
+        x="顾问", 
+        y="人数", 
+        color="指标类型", 
+        barmode="group",
+        text_auto=True,
+        color_discrete_map={"目标": "#94A3B8", "实际": "#2563EB"}
     )
+    fig_person.update_layout(margin=dict(l=20, r=20, t=30, b=20), height=380)
+    st.plotly_chart(fig_person, width="stretch")
 
-with col_d2:
-    st.download_button(
-        label="📦 一键打包导出：Excel 表格 + 4张高精数据分析图表 (.zip)",
-        data=zip_data,
-        file_name="2026年9月招生看板及图表全量导出包.zip",
-        mime="application/zip",
-        use_container_width=True,
+with chart_tab2:
+    fig_major = px.bar(
+        current_df, 
+        x="专业/基础名称", 
+        y="总目标", 
+        title="各专业月度目标分布",
+        text_auto=True,
+        color_discrete_sequence=["#0EA5E9"]
     )
+    fig_major.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=380)
+    st.plotly_chart(fig_major, width="stretch")
+
+st.markdown("---")
+
+# 4. 增量录入与基础配置修改
+st.markdown("### ✏️ 快速录入日增量数据")
+with st.expander("点击展开增量数据录入窗口", expanded=False):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        entry_date = st.selectbox("录入日期", DATES)
+    with col2:
+        entry_major = st.selectbox("选择专业", MAJORS)
+    with col3:
+        entry_person = st.selectbox("责任顾问", DISPLAY_PERSONS)
+        
+    entry_val = st.number_input("今日新增招生人数", min_value=0, value=1, step=1)
+    
+    if st.button("提交增量数据", width="stretch"):
+        raw_person_name = RAW_PERSONS[DISPLAY_PERSONS.index(entry_person)]
+        target_col_raw = f"{raw_person_name}_实际"
+        
+        st.session_state["daily_deltas"][entry_date].append((entry_major, target_col_raw, entry_val))
+        st.success(f"已成功录入：{entry_date} | {entry_major} | {entry_person} +{entry_val}人！")
+        st.rerun()
+
+st.markdown("### ⚙️ 基础目标配置与修改")
+edited_df = st.data_editor(
+    st.session_state["base_targets"],
+    key="target_editor",
+    width="stretch"
+)
+
+if st.button("保存目标配置修改", width="stretch"):
+    st.session_state["base_targets"] = edited_df
+    st.success("基础目标配置已成功更新！")
+    st.rerun()
