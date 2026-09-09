@@ -17,14 +17,40 @@ st.set_page_config(
 )
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 完美整合横竖柱形图、多维折线图与饼图")
+st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 基础数据定义
+# 2. 侧边栏：数据管理 & 匿名化/脱敏设置
 # -----------------------------------------------------------------------------
-PERSONS = ["人员A", "人员B", "人员C", "人员D", "人员E"]
+st.sidebar.title("🛠️ 数据管理与设置")
 
+# 脱敏/匿名模式开关
+st.sidebar.subheader("🔒 隐私与显示设置")
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
+anonymize_type = st.sidebar.radio(
+    "选择脱敏方式：",
+    ["咨询顾问 代称 (如 咨询顾问 A)", "姓氏脱敏 (如 覃**)"],
+    disabled=not enable_anonymize
+)
+
+# 原始真实人员姓名
+RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
+
+# 生成映射字典与展示姓名列表
+if enable_anonymize:
+    if "咨询顾问" in anonymize_type:
+        alias_map = {p: f"咨询顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
+    else:
+        alias_map = {p: f"{p[0]}**" for p in RAW_PERSONS}
+else:
+    alias_map = {p: p for p in RAW_PERSONS}
+
+PERSONS = [alias_map[p] for p in RAW_PERSONS]
+
+# -----------------------------------------------------------------------------
+# 3. 基础数据定义 (映射到匿名/真实姓名)
+# -----------------------------------------------------------------------------
 MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
     ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -54,7 +80,7 @@ def init_default_data():
     base_data = []
     for idx, (name, total_target, person_tgts) in enumerate(MAJORS, 1):
         row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
-        for p, tgt in zip(PERSONS, person_tgts):
+        for p, tgt in zip(RAW_PERSONS, person_tgts):
             row[f"{p}_目标"] = tgt
             row[f"{p}_实际"] = 0
         row["其他人员_实际"] = 0
@@ -62,47 +88,50 @@ def init_default_data():
     st.session_state["base_targets"] = pd.DataFrame(base_data)
 
     st.session_state["daily_deltas"] = {
-        "9月1日": [("电气基础", "人员A_实际", 1)],
+        "9月1日": [
+            ("电气基础", "覃小燕_实际", 1)
+        ],
         "9月2日": [
-            ("环保专业", "人员A_实际", 1),
-            ("环保专业", "人员B_实际", 1),
-            ("电气基础", "人员A_实际", 1),
+            ("环保专业", "覃小燕_实际", 1),
+            ("环保专业", "左丹丹_实际", 1),
+            ("电气基础", "覃小燕_实际", 1),
             ("发输电专业", "其他人员_实际", 1),
             ("233网校", "其他人员_实际", 1),
         ],
         "9月3日": [
-            ("环评专业", "人员B_实际", 1),
-            ("暖通专业", "人员E_实际", 1),
-            ("环保基础", "人员B_实际", 1),
+            ("环评专业", "左丹丹_实际", 1),
+            ("暖通专业", "周欢喜_实际", 1),
+            ("环保基础", "左丹丹_实际", 1),
             ("环保基础", "其他人员_实际", 1),
         ],
         "9月4日": [
-            ("电气基础", "人员A_实际", 1),
-            ("电气基础", "人员B_实际", 1),
-            ("环保基础", "人员A_实际", 1),
+            ("电气基础", "覃小燕_实际", 1),
+            ("电气基础", "左丹丹_实际", 1),
+            ("环保基础", "覃小燕_实际", 1),
             ("水利水电基础", "其他人员_实际", 1),
         ],
         "9月5日": [
-            ("给排水专业", "人员C_实际", 1),
-            ("暖通专业", "人员E_实际", 1),
-            ("岩土基础", "人员C_实际", 1),
-            ("暖通基础", "人员E_实际", 1),
+            ("给排水专业", "梁书华_实际", 1),
+            ("暖通专业", "周欢喜_实际", 1),
+            ("岩土基础", "梁书华_实际", 1),
+            ("暖通基础", "周欢喜_实际", 1),
         ],
         "9月6日": [
-            ("给排水专业", "人员C_实际", 1),
+            ("给排水专业", "梁书华_实际", 1),
             ("环保专业", "其他人员_实际", 1),
-            ("岩土专业", "其他人员_实际", 1),
+            ("岩土专业", "梁书华_实际", 1),
         ],
         "9月7日": [
-            ("电气基础", "人员A_实际", 2),
-            ("环保基础", "人员A_实际", 1),
-            ("水基础", "人员A_实际", 1),
-            ("环保基础", "人员B_实际", 1),
-            ("暖通基础", "人员B_实际", 1),
-            ("岩土基础", "人员C_实际", 1),
-            ("暖通专业", "人员C_实际", 1),
-            ("公共基础", "人员D_实际", 1),
-            ("环保基础", "人员D_实际", 1),
+            ("电气基础", "覃小燕_实际", 3),
+            ("环保基础", "覃小燕_实际", 1),
+            ("水基础", "覃小燕_实际", 1),
+            ("环保基础", "左丹丹_实际", 1),
+            ("暖通基础", "左丹丹_实际", 1),
+            ("暖通专业", "梁书华_实际", 1),
+            ("岩土基础", "梁书华_实际", 1),
+            ("暖通基础", "梁书华_实际", 1),
+            ("公共基础", "古晨晓_实际", 1),
+            ("环保基础", "古晨晓_实际", 1),
         ],
     }
 
@@ -110,33 +139,38 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 3. 侧边栏设置与录入
+# 4. 单日新增招生录入表单
 # -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ 数据管理与设置")
+st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 录入单日新增招生")
 
 with st.sidebar.form("add_delta_form"):
     input_date = st.selectbox("选择日期", DATES)
     input_major = st.selectbox("选择专业/基础", [m[0] for m in MAJORS])
-    input_person = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
+    # 界面下拉框展示当前模式下的名称
+    input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
 
     submit_btn = st.form_submit_button("提交录入")
     if submit_btn:
-        target_col = f"{input_person}_实际"
+        # 反查真实姓名存入底层数据
+        inv_alias_map = {v: k for k, v in alias_map.items()}
+        raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
+        
+        target_col = f"{raw_person_name}_实际"
         if input_date not in st.session_state["daily_deltas"]:
             st.session_state["daily_deltas"][input_date] = []
         st.session_state["daily_deltas"][input_date].append(
             (input_major, target_col, int(input_val))
         )
-        st.sidebar.success(f"已成功添加：{input_date} {input_major} - {input_person} +{input_val}人")
+        st.sidebar.success(f"已成功添加：{input_date} {input_major} - {input_person_disp} +{input_val}人")
 
 if st.sidebar.button("🔄 重置为默认数据"):
     init_default_data()
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 4. 数据视图与计算
+# 5. 数据视图与动态计算
 # -----------------------------------------------------------------------------
 def get_processed_df(selected_date):
     df_result = st.session_state["base_targets"].copy()
@@ -167,7 +201,7 @@ for c in num_cols:
     sum_row[c] = int(calc_df[c].sum())
 
 diff_row = {"专业/基础名称": "与目标之差"}
-for p in PERSONS:
+for p in RAW_PERSONS:
     diff_row[f"{p}_目标"] = ""
     diff_row[f"{p}_实际"] = sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"]
 diff_row["其他人员_实际"] = ""
@@ -185,27 +219,38 @@ for c in num_cols:
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 # -----------------------------------------------------------------------------
-# 5. 原生 HTML 表格渲染
+# 6. 原生 HTML 表格渲染 (动态适应匿名/真实姓名)
 # -----------------------------------------------------------------------------
-def build_html_document(df, sum_r, diff_r, rate_r):
+def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     rows_html = ""
     for idx, row in df.iterrows():
+        person_cells = ""
+        for rp in raw_p_names:
+            tgt_val = row[f"{rp}_目标"]
+            act_val = row[f"{rp}_实际"]
+            person_cells += f'<td class="num">{tgt_val}</td><td class="num">{act_val if act_val > 0 else ""}</td>'
+
         rows_html += f"""
         <tr>
             <td class="num">{row['序号']}</td>
             <td class="zh">{row['专业/基础名称']}</td>
             <td class="num">{row['目标人数']}</td>
-            <td class="num">{row['人员A_目标']}</td><td class="num">{row['人员A_实际']}</td>
-            <td class="num">{row['人员B_目标']}</td><td class="num">{row['人员B_实际']}</td>
-            <td class="num">{row['人员C_目标']}</td><td class="num">{row['人员C_实际']}</td>
-            <td class="num">{row['人员D_目标']}</td><td class="num">{row['人员D_实际']}</td>
-            <td class="num">{row['人员E_目标']}</td><td class="num">{row['人员E_实际']}</td>
-            <td class="num">{row['其他人员_实际']}</td>
+            {person_cells}
+            <td class="num">{row['其他人员_实际'] if row['其他人员_实际'] > 0 else ''}</td>
             <td class="num">{row['目标人数']}</td>
             <td class="num">{row['实际完成']}</td>
             <td class="num">{row['与目标之差']}</td>
         </tr>
         """
+
+    person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
+    sub_headers = '<th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>' * len(p_names)
+
+    sum_person_cells = ""
+    diff_person_cells = ""
+    for rp in raw_p_names:
+        sum_person_cells += f'<td class="bg-total num">{sum_r[f"{rp}_目标"]}</td><td class="bg-total num">{sum_r[f"{rp}_实际"]}</td>'
+        diff_person_cells += f'<td class="bg-total"></td><td class="bg-total num">{diff_r[f"{rp}_实际"]}</td>'
 
     full_html = f"""
     <!DOCTYPE html>
@@ -233,31 +278,19 @@ def build_html_document(df, sum_r, diff_r, rate_r):
             <th rowspan="2" class="bg-header">序号</th>
             <th rowspan="2" class="bg-header">专业/基础名称</th>
             <th rowspan="2" class="bg-header">目标人数</th>
-            <th colspan="2" class="bg-person">人员A</th>
-            <th colspan="2" class="bg-person">人员B</th>
-            <th colspan="2" class="bg-person">人员C</th>
-            <th colspan="2" class="bg-person">人员D</th>
-            <th colspan="2" class="bg-person">人员E</th>
+            {person_headers}
             <th rowspan="2" class="bg-header">其他人员</th>
             <th rowspan="2" class="bg-header">目标人数</th>
             <th rowspan="2" class="bg-header">实际完成</th>
             <th rowspan="2" class="bg-header">与目标之差</th>
         </tr>
         <tr>
-            <th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>
-            <th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>
-            <th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>
-            <th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>
-            <th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>
+            {sub_headers}
         </tr>
         {rows_html}
         <tr>
             <td class="bg-total"></td><td class="bg-total zh">{sum_r['专业/基础名称']}</td><td class="bg-total num">{sum_r['目标人数']}</td>
-            <td class="bg-total num">{sum_r['人员A_目标']}</td><td class="bg-total num">{sum_r['人员A_实际']}</td>
-            <td class="bg-total num">{sum_r['人员B_目标']}</td><td class="bg-total num">{sum_r['人员B_实际']}</td>
-            <td class="bg-total num">{sum_r['人员C_目标']}</td><td class="bg-total num">{sum_r['人员C_实际']}</td>
-            <td class="bg-total num">{sum_r['人员D_目标']}</td><td class="bg-total num">{sum_r['人员D_实际']}</td>
-            <td class="bg-total num">{sum_r['人员E_目标']}</td><td class="bg-total num">{sum_r['人员E_实际']}</td>
+            {sum_person_cells}
             <td class="bg-total num">{sum_r['其他人员_实际']}</td>
             <td class="bg-total num">{sum_r['目标人数']}</td>
             <td class="bg-total num">{sum_r['实际完成']}</td>
@@ -265,17 +298,13 @@ def build_html_document(df, sum_r, diff_r, rate_r):
         </tr>
         <tr>
             <td class="bg-total"></td><td class="bg-total zh">{diff_r['专业/基础名称']}</td><td class="bg-total"></td>
-            <td class="bg-total"></td><td class="bg-total num">{diff_r['人员A_实际']}</td>
-            <td class="bg-total"></td><td class="bg-total num">{diff_r['人员B_实际']}</td>
-            <td class="bg-total"></td><td class="bg-total num">{diff_r['人员C_实际']}</td>
-            <td class="bg-total"></td><td class="bg-total num">{diff_r['人员D_实际']}</td>
-            <td class="bg-total"></td><td class="bg-total num">{diff_r['人员E_实际']}</td>
+            {diff_person_cells}
             <td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td>
             <td class="bg-total num">{diff_r['与目标之差']}</td>
         </tr>
         <tr>
             <td class="bg-total"></td><td class="bg-total zh">{rate_r['专业/基础名称']}</td><td class="bg-total"></td>
-            <td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td>
+            <td class="bg-total" colspan="{len(p_names)*2}"></td>
             <td class="bg-total"></td><td class="bg-total"></td>
             <td class="bg-total num">{rate_r['实际完成']}</td>
             <td class="bg-total"></td>
@@ -288,25 +317,24 @@ def build_html_document(df, sum_r, diff_r, rate_r):
     return full_html
 
 st.markdown("### 📝 2026年9月招生数据动态表")
-html_code = build_html_document(calc_df, sum_row, diff_row, rate_row)
+html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 components.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 6. 可视化分析区域（选项卡切换：基础柱状图 + 多维折线与饼图）
+# 7. 可视化分析区域（选项卡：柱状图 + 动态折线与饼图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📈 可视化数据分析")
 
-tab_bar, tab_multi = st.tabs(["📊 基础柱状图分析（保留原版）", "🔄 多维动态趋势与构成（折线图/饼图）"])
+tab_bar, tab_multi = st.tabs(["📊 基础柱状图分析（横竖柱图）", "🔄 多维动态趋势与构成（折线图/饼图）"])
 
-# --- 选项卡 1：保留原有的横竖柱形图 ---
+# --- 选项卡 1：柱形图 ---
 with tab_bar:
     c1, c2 = st.columns(2)
 
     with c1:
-        # 竖向柱状图：各人员目标 vs 实际完成对比
-        person_target_vals = [sum_row[f"{p}_目标"] for p in PERSONS]
-        person_actual_vals = [sum_row[f"{p}_实际"] for p in PERSONS]
+        person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
+        person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
 
         fig_person = go.Figure(
             data=[
@@ -328,7 +356,6 @@ with tab_bar:
         st.plotly_chart(fig_person, use_container_width=True)
 
     with c2:
-        # 横向柱状图：招生完成人数 Top 8 专业/基础
         top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
         fig_major = px.bar(
             top_majors,
@@ -344,7 +371,6 @@ with tab_bar:
 
 # --- 选项卡 2：多维动态折线图与饼图 ---
 with tab_multi:
-    # 1. 交互控制面板
     ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
 
     with ctrl_c1:
@@ -352,39 +378,37 @@ with tab_multi:
 
     with ctrl_c2:
         if person_mode == "单人独立分析":
-            selected_person = st.selectbox("选择具体人员：", PERSONS + ["其他人员"])
+            selected_person_disp = st.selectbox("选择具体人员：", PERSONS + ["其他人员"])
         elif person_mode == "多人员对比分析":
-            selected_persons = st.multiselect("选择要对比的人员：", PERSONS + ["其他人员"], default=["人员A", "人员B", "人员C"])
+            selected_persons_disp = st.multiselect("选择要对比的人员：", PERSONS + ["其他人员"], default=PERSONS[:3])
         else:
-            selected_person = "全体人员"
+            selected_person_disp = "全体人员"
 
     with ctrl_c3:
         time_granularity = st.selectbox("选择时间维度：", ["按日期 (9月1日-9月7日)", "按星期 (星期二-星期一)", "按月份视角 (历史与当月趋势)"])
 
-    # 2. 构建明细时间序列数据 DataFrame
     time_records = []
     for d_idx, d in enumerate(DATES):
         w = WEEKDAYS[d_idx]
-        d_dict = {p: 0 for p in PERSONS + ["其他人员"]}
+        d_dict = {p: 0 for p in RAW_PERSONS + ["其他人员"]}
         for major, col, val in st.session_state["daily_deltas"].get(d, []):
             p_name = col.replace("_实际", "")
             d_dict[p_name] += val
         
         for p_name, val in d_dict.items():
+            disp_p_name = alias_map.get(p_name, p_name)
             time_records.append({
                 "日期": d,
                 "星期": w,
                 "月份": "2026年9月",
-                "人员": p_name,
+                "人员": disp_p_name,
                 "新增报名数": val
             })
 
     df_time_series = pd.DataFrame(time_records)
 
-    # 3. 动态绘制折线图与饼图
     chart_col1, chart_col2 = st.columns(2)
 
-    # 折线图
     with chart_col1:
         x_col = "日期" if "日期" in time_granularity else ("星期" if "星期" in time_granularity else "月份")
         
@@ -398,16 +422,16 @@ with tab_multi:
             fig_line.update_traces(textposition="top center", line_color="#2E8B57", line_width=3)
             
         elif person_mode == "单人独立分析":
-            df_chart_line = df_time_series[df_time_series["人员"] == selected_person].groupby(x_col)["新增报名数"].sum().reset_index()
+            df_chart_line = df_time_series[df_time_series["人员"] == selected_person_disp].groupby(x_col)["新增报名数"].sum().reset_index()
             fig_line = px.line(
                 df_chart_line, x=x_col, y="新增报名数", markers=True,
-                title=f"【{selected_person}】个人报名趋势折线图 ({time_granularity})",
+                title=f"【{selected_person_disp}】个人报名趋势折线图 ({time_granularity})",
                 text="新增报名数"
             )
             fig_line.update_traces(textposition="top center", line_color="#1F77B4", line_width=3)
             
         else:
-            df_chart_line = df_time_series[df_time_series["人员"].isin(selected_persons)].groupby([x_col, "人员"])["新增报名数"].sum().reset_index()
+            df_chart_line = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby([x_col, "人员"])["新增报名数"].sum().reset_index()
             fig_line = px.line(
                 df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True,
                 title=f"【多人员对比】报名趋势折线图 ({time_granularity})"
@@ -417,7 +441,6 @@ with tab_multi:
         fig_line.update_layout(yaxis_title="新增报名人数", xaxis_title=x_col)
         st.plotly_chart(fig_line, use_container_width=True)
 
-    # 饼图
     with chart_col2:
         if person_mode == "全体人员":
             df_pie = df_time_series.groupby("人员")["新增报名数"].sum().reset_index()
@@ -429,11 +452,14 @@ with tab_multi:
             fig_pie.update_traces(textinfo="label+percent+value")
             
         elif person_mode == "单人独立分析":
+            inv_map = {v: k for k, v in alias_map.items()}
+            raw_sel_p = inv_map.get(selected_person_disp, selected_person_disp)
+            
             major_records = []
             for d in DATES:
                 for major, col, val in st.session_state["daily_deltas"].get(d, []):
                     p_name = col.replace("_实际", "")
-                    if p_name == selected_person:
+                    if p_name == raw_sel_p:
                         major_records.append({"专业/基础": major, "新增人数": val})
             
             df_major_pie = pd.DataFrame(major_records)
@@ -441,16 +467,16 @@ with tab_multi:
                 df_major_pie = df_major_pie.groupby("专业/基础")["新增人数"].sum().reset_index()
                 fig_pie = px.pie(
                     df_major_pie, values="新增人数", names="专业/基础",
-                    title=f"【{selected_person}】招生专业分布构成饼图",
+                    title=f"【{selected_person_disp}】招生专业分布构成饼图",
                     hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3
                 )
                 fig_pie.update_traces(textinfo="label+percent+value")
             else:
                 fig_pie = go.Figure()
-                fig_pie.update_layout(title=f"【{selected_person}】暂无招生数据录入")
+                fig_pie.update_layout(title=f"【{selected_person_disp}】暂无招生数据录入")
                 
         else:
-            df_pie = df_time_series[df_time_series["人员"].isin(selected_persons)].groupby("人员")["新增报名数"].sum().reset_index()
+            df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员")["新增报名数"].sum().reset_index()
             fig_pie = px.pie(
                 df_pie, values="新增报名数", names="人员",
                 title=f"【选中多人员】业绩总量构成占比饼图",
@@ -461,9 +487,9 @@ with tab_multi:
         st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 7. Excel 导出功能
+# 8. Excel 导出功能
 # -----------------------------------------------------------------------------
-def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons):
+def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "招生数据动态表"
@@ -502,7 +528,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons):
     ws["C2"] = "目标人数"
 
     col_idx = 4
-    for p in persons:
+    for p in persons_disp:
         ws.merge_cells(start_row=2, start_column=col_idx, end_row=2, end_column=col_idx + 1)
         p_cell = ws.cell(row=2, column=col_idx, value=p)
         p_cell.fill = PERSON_BG
@@ -535,12 +561,12 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons):
         ws.cell(row=curr_r, column=3, value=row["目标人数"]).font = FONT_BODY_NUM
 
         c_offset = 4
-        for p in persons:
-            ws.cell(row=curr_r, column=c_offset, value=row[f"{p}_目标"]).font = FONT_BODY_NUM
-            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{p}_实际"]).font = FONT_BODY_NUM
+        for rp in raw_persons:
+            ws.cell(row=curr_r, column=c_offset, value=row[f"{rp}_目标"]).font = FONT_BODY_NUM
+            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{rp}_实际"] if row[f"{rp}_实际"] > 0 else "").font = FONT_BODY_NUM
             c_offset += 2
 
-        ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_实际", 0)).font = FONT_BODY_NUM
+        ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_实际", 0) if row.get("其他人员_实际", 0) > 0 else "").font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 1, value=row["目标人数"]).font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 2, value=row["实际完成"]).font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 3, value=row["与目标之差"]).font = FONT_BODY_NUM
@@ -556,9 +582,9 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons):
         ws.cell(row=curr_r, column=3, value=r_data.get("目标人数", "")).font = FONT_HEADER
 
         c_offset = 4
-        for p in persons:
-            ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{p}_目标", "")).font = FONT_HEADER
-            ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get(f"{p}_实际", "")).font = FONT_HEADER
+        for rp in raw_persons:
+            ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{rp}_目标", "")).font = FONT_HEADER
+            ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get(f"{rp}_实际", "")).font = FONT_HEADER
             c_offset += 2
 
         ws.cell(row=curr_r, column=c_offset, value=r_data.get("其他人员_实际", "")).font = FONT_HEADER
@@ -578,12 +604,12 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons):
     return output.getvalue()
 
 st.markdown("---")
-excel_bytes = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS)
+excel_bytes = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
 
 st.download_button(
-    label="📊 导出为原版颜色 Excel 表格 (.xlsx)",
+    label="📊 导出为当前模式 Excel 表格 (.xlsx)",
     data=excel_bytes,
-    file_name="2026年9月招生数据动态表_带颜色版.xlsx",
+    file_name="2026年9月招生数据动态表_脱敏版.xlsx" if enable_anonymize else "2026年9月招生数据动态表_完整姓名版.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True,
 )
