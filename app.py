@@ -4,7 +4,6 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -29,15 +28,17 @@ st.sidebar.title("🛠️ 数据管理与设置")
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 匿名模式", value=True)
 anonymize_type = st.sidebar.radio(
     "选择脱敏方式：",
-    ["咨询顾问 代称 (如 咨询顾问 A)", "姓氏脱敏 (如 覃**)"],
+    ["动物代称 (如 🦊 顾问 A)", "姓氏脱敏 (如 覃**)"],
     disabled=not enable_anonymize
 )
 
 RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
+ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
 
+# 生成统一长度与对齐的名称，避免错落感
 if enable_anonymize:
-    if "咨询顾问" in anonymize_type:
-        alias_map = {p: f"咨询顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
+    if "动物代称" in anonymize_type:
+        alias_map = {p: f"{ANIMALS[i]} 顾问 {chr(65+i)}" for i, p in enumerate(RAW_PERSONS)}
     else:
         alias_map = {p: f"{p[0]}**" for p in RAW_PERSONS}
 else:
@@ -236,7 +237,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
         """
 
     person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
-    sub_headers = '<th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>' * len(p_names)
+    sub_headers = '<th class="bg-header">目标</th><th class="bg-header">实际</th>' * len(p_names)
 
     sum_person_cells = ""
     diff_person_cells = ""
@@ -252,12 +253,12 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     <style>
         body {{ margin: 0; padding: 0; font-family: SimSun, "Times New Roman", serif; background-color: #ffffff; }}
         .table-container {{ width: 100%; overflow-x: auto; }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #A6A6A6; }}
-        th, td {{ border: 1px solid #A6A6A6; padding: 6px 4px; font-weight: normal; color: #000000; }}
-        .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: normal; }}
-        .bg-header {{ background-color: #EFEFEF; }}
-        .bg-person {{ background-color: #D0E0E3; }}
-        .bg-total {{ background-color: #FFF2CC; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #7F7F7F; }}
+        th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
+        .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: bold; }}
+        .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
+        .bg-person {{ background-color: #D0E0E3; font-weight: bold; }}
+        .bg-total {{ background-color: #FFF2CC; font-weight: bold; }}
         .num {{ font-family: "Times New Roman", serif; }}
         .zh {{ font-family: SimSun, serif; }}
     </style>
@@ -265,7 +266,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     <body>
     <div class="table-container">
     <table>
-        <tr><td colspan="17" class="bg-title">2026年9月招生数据动态表(2026年9月1日-9月7日)</td></tr>
+        <tr><td colspan="17" class="bg-title">2026年9月招生数据动态表 (2026年9月1日-9月7日)</td></tr>
         <tr>
             <th rowspan="2" class="bg-header">序号</th>
             <th rowspan="2" class="bg-header">专业/基础名称</th>
@@ -311,10 +312,10 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
 st.markdown("### 📝 2026年9月招生数据动态表")
 calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
-components.html(html_code, height=680, scrolling=True)
+st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化柱状图生成
+# 7. 可视化柱状图生成（极高对比度 + 齐整排版）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础柱状图分析")
@@ -325,32 +326,60 @@ with c1:
     person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
     person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
 
+    # 深度强化对比度：经典深蓝色 (#0B3C5D) VS 醒目亮红橘色 (#FF3D00)
     fig_person = go.Figure(
         data=[
-            go.Bar(name="目标人数", x=PERSONS, y=person_target_vals, marker_color="#A6C8E0", text=person_target_vals, textposition="auto"),
-            go.Bar(name="实际完成", x=PERSONS, y=person_actual_vals, marker_color="#2E8B57", text=person_actual_vals, textposition="auto"),
+            go.Bar(
+                name="目标人数", x=PERSONS, y=person_target_vals, 
+                marker_color="#0B3C5D", text=person_target_vals, textposition="outside",
+                textfont=dict(size=12, color="#000000"),
+                marker_line_color="#000000", marker_line_width=1.5
+            ),
+            go.Bar(
+                name="实际完成", x=PERSONS, y=person_actual_vals, 
+                marker_color="#FF3D00", text=person_actual_vals, textposition="outside",
+                textfont=dict(size=12, color="#000000"),
+                marker_line_color="#000000", marker_line_width=1.5
+            ),
         ]
     )
     fig_person.update_layout(
-        title="各人员目标 vs 实际完成对比 (竖柱图)",
+        title="<b>各人员目标 vs 实际完成对比</b>",
         barmode="group",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis=dict(gridcolor="#E0E0E0", showline=True, linewidth=1, linecolor="#000000")
     )
     st.plotly_chart(fig_person, use_container_width=True)
 
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
+    
+    # 横向柱状图使用高饱和度深绿色 (#00796B)
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
-        title="招生完成人数 Top 8 专业/基础 (横柱图)", color="实际完成",
-        color_continuous_scale="Viridis", text="实际完成"
+        title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
+        color_discrete_sequence=["#00796B"]
     )
-    fig_major.update_layout(yaxis={"categoryorder": "total ascending"})
-    fig_major.update_traces(textposition="outside")
+    fig_major.update_layout(
+        yaxis={"categoryorder": "total ascending"},
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(gridcolor="#E0E0E0", showline=True, linewidth=1, linecolor="#000000")
+    )
+    fig_major.update_traces(
+        textposition="outside", 
+        textfont=dict(size=12, color="#000000"),
+        marker_line_color="#000000", 
+        marker_line_width=1.5
+    )
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度分析（折线图/饼图）
+# 8. 时间维度分析（消除了错落感与错位的折线/饼图）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 多维动态趋势与构成分析")
@@ -401,27 +430,39 @@ chart_col1, chart_col2 = st.columns(2)
 with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 全体人员招生趋势 ({x_col}维度)", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#2E8B57", line_width=3, marker=dict(size=8))
+        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>全体人员招生趋势 ({x_col})</b>", text="新增报名数")
+        fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=4, marker=dict(size=10, color="#D50000"))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 【{selected_person_disp}】个人趋势 ({x_col}维度)", text="新增报名数")
-        fig_line.update_traces(textposition="top center", line_color="#1F77B4", line_width=3, marker=dict(size=8))
+        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 ({x_col})</b>", text="新增报名数")
+        fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=4, marker=dict(size=10, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True, title=f"📈 多人招生趋势对比 ({x_col}维度)")
-        fig_line.update_traces(line_width=2.5, marker=dict(size=6))
+        fig_line = px.line(
+            df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True, 
+            title=f"📈 <b>多人招生趋势对比 ({x_col})</b>",
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig_line.update_traces(line_width=3, marker=dict(size=8))
 
     fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
-    fig_line.update_layout(yaxis_title="新增报名人数", xaxis_title=x_col, hovermode="x unified")
+    fig_line.update_layout(
+        yaxis_title="新增报名人数", xaxis_title=x_col, hovermode="x unified",
+        plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF",
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis=dict(gridcolor="#E0E0E0")
+    )
     st.plotly_chart(fig_line, use_container_width=True)
 
 with chart_col2:
     if person_mode == "全体人员":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title="🍩 全体人员招生贡献比例", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_pie = px.pie(
+            df_pie, values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献比例</b>", 
+            hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
+        )
         fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
     elif person_mode == "单人独立分析":
         inv_map = {v: k for k, v in alias_map.items()}
@@ -435,20 +476,28 @@ with chart_col2:
         df_major_pie = pd.DataFrame(major_records)
         if not df_major_pie.empty:
             df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
-            fig_pie = px.pie(df_major_pie, values="新增人数", names="专业/基础", title=f"🍩 【{selected_person_disp}】招生成交专业构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_pie.update_traces(textinfo="label+percent+value")
+            fig_pie = px.pie(
+                df_major_pie, values="新增人数", names="专业/基础", 
+                title=f"🍩 <b>【{selected_person_disp}】招生成交专业构成</b>", 
+                hole=0.4, color_discrete_sequence=px.colors.qualitative.Set1
+            )
+            fig_pie.update_traces(textinfo="label+percent+value", textposition="inside", marker=dict(line=dict(color="#FFFFFF", width=2)))
         else:
             fig_pie = go.Figure()
             fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量招生数据")
     else:
         df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie, values="新增报名数", names="人员", title=f"🍩 对比人员总量占比构成", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-        fig_pie.update_traces(textinfo="label+percent+value")
+        fig_pie = px.pie(
+            df_pie, values="新增报名数", names="人员", title=f"🍩 <b>对比人员总量占比构成</b>", 
+            hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig_pie.update_traces(textinfo="label+percent+value", textposition="inside")
 
+    fig_pie.update_layout(paper_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20))
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出逻辑（包含 Excel 数据表 + Plotly 导出图表打包 Zip）
+# 9. 导出逻辑
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -461,16 +510,16 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     PERSON_BG = PatternFill(start_color="D0E0E3", end_color="D0E0E3", fill_type="solid")
     TOTAL_ROW_BG = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-    FONT_TITLE = Font(name="SimSun", size=14)
-    FONT_HEADER = Font(name="SimSun", size=10)
+    FONT_TITLE = Font(name="SimSun", size=14, bold=True)
+    FONT_HEADER = Font(name="SimSun", size=10, bold=True)
     FONT_BODY_NUM = Font(name="Times New Roman", size=10)
     FONT_BODY_ZH = Font(name="SimSun", size=10)
 
     BORDER_THIN = Border(
-        left=Side(style="thin", color="A6A6A6"),
-        right=Side(style="thin", color="A6A6A6"),
-        top=Side(style="thin", color="A6A6A6"),
-        bottom=Side(style="thin", color="A6A6A6"),
+        left=Side(style="thin", color="7F7F7F"),
+        right=Side(style="thin", color="7F7F7F"),
+        top=Side(style="thin", color="7F7F7F"),
+        bottom=Side(style="thin", color="7F7F7F"),
     )
     ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
 
@@ -493,8 +542,8 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         ws.merge_cells(start_row=2, start_column=col_idx, end_row=2, end_column=col_idx + 1)
         p_cell = ws.cell(row=2, column=col_idx, value=p)
         p_cell.fill = PERSON_BG
-        ws.cell(row=3, column=col_idx, value="目标人数")
-        ws.cell(row=3, column=col_idx + 1, value="实际完成")
+        ws.cell(row=3, column=col_idx, value="目标")
+        ws.cell(row=3, column=col_idx + 1, value="实际")
         col_idx += 2
 
     ws.merge_cells("N2:N3")
@@ -565,19 +614,14 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     return output.getvalue()
 
 def build_full_export_pack(excel_bytes, fig_dict):
-    """把 Excel 和 所有分析 Plotly 图表 (PNG) 打包进 ZIP 压缩包"""
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        # 1. 放入 Excel
         zip_file.writestr("2026年9月招生数据表.xlsx", excel_bytes)
-        
-        # 2. 导出并放入图片 (若系统未安装 kaleido 库则降级捕获)
         for fig_name, fig_obj in fig_dict.items():
             try:
                 img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
                 zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
             except Exception:
-                # 若环境缺少 kaleido，写入导出说明提示文本
                 zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖库 (pip install kaleido)")
 
     return zip_buffer.getvalue()
