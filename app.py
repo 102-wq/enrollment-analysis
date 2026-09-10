@@ -37,7 +37,6 @@ else:
 
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
-# 展示纯图像与真实姓名对照提示卡片（仅管理者可见）
 if enable_anonymize:
     with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
         mapping_df = pd.DataFrame({
@@ -164,25 +163,37 @@ if st.sidebar.button("🔄 重置为默认演示数据"):
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 数据计算逻辑
+# 5. 时间汇总粒度切片筛选
 # -----------------------------------------------------------------------------
-def get_processed_df(selected_date):
-    df_result = st.session_state["base_targets"].copy()
-    if selected_date == "📅 当月累计数据（截至9月7日）":
-        for d in DATES:
-            for major, col, val in st.session_state["daily_deltas"].get(d, []):
-                df_result.loc[df_result["专业/基础名称"] == major, col] += val
+st.subheader("🗓️ 时间汇总粒度筛选")
+
+f_col1, f_col2 = st.columns(2)
+
+with f_col1:
+    time_granularity_type = st.selectbox(
+        "选择时间汇总粒度：",
+        ["按日（单日切片）", "按周（周度汇总）", "按月（月度全量）"]
+    )
+
+with f_col2:
+    if time_granularity_type == "按日（单日切片）":
+        selected_time_range = st.selectbox("选择具体日期：", DATES, index=len(DATES)-1)
+        selected_dates_list = [selected_time_range]
+    elif time_granularity_type == "按周（周度汇总）":
+        selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
+        selected_dates_list = DATES  # 包含当周的所有日期
     else:
-        for major, col, val in st.session_state["daily_deltas"].get(selected_date, []):
+        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月"])
+        selected_dates_list = DATES  # 包含当月的所有日期
+
+def get_processed_df_by_dates(dates_list):
+    df_result = st.session_state["base_targets"].copy()
+    for d in dates_list:
+        for major, col, val in st.session_state["daily_deltas"].get(d, []):
             df_result.loc[df_result["专业/基础名称"] == major, col] += val
     return df_result
 
-st.subheader("🗓️ 数据看板切片")
-view_options = [f"{d}单日" for d in DATES] + ["📅 当月累计数据（截至9月7日）"]
-date_option = st.radio("切换展示区间：", view_options, index=len(view_options) - 1, horizontal=True)
-
-raw_date_name = date_option.replace("单日", "")
-calc_df = get_processed_df(raw_date_name)
+calc_df = get_processed_df_by_dates(selected_dates_list)
 
 act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
 calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
@@ -206,7 +217,7 @@ total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
 
-rate_row = {"专业/基础名称": "2026年9月目标完成率"}
+rate_row = {"专业/基础名称": "目标完成率"}
 for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
@@ -214,7 +225,7 @@ rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 # -----------------------------------------------------------------------------
 # 6. HTML 数据表格
 # -----------------------------------------------------------------------------
-def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
+def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
     for idx, row in df.iterrows():
         person_cells = ""
@@ -266,7 +277,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     <body>
     <div class="table-container">
     <table>
-        <tr><td colspan="17" class="bg-title">2026年9月招生数据动态表 (2026年9月1日-9月7日)</td></tr>
+        <tr><td colspan="17" class="bg-title">2026年招生数据动态表 ({range_title})</td></tr>
         <tr>
             <th rowspan="2" class="bg-header">序号</th>
             <th rowspan="2" class="bg-header">专业/基础名称</th>
@@ -309,13 +320,13 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names):
     """
     return full_html
 
-st.markdown("### 📝 2026年9月招生数据动态明细")
+st.markdown(f"### 📝 招生数据动态明细 （区间：{selected_time_range}）")
 calc_df['other_act'] = calc_df['其他人员_实际']
-html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
+html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range)
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化图表展示（移除描边设置）
+# 7. 可视化图表展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础指标分析")
@@ -326,7 +337,6 @@ with c1:
     person_target_vals = [sum_row[f"{p}_目标"] for p in RAW_PERSONS]
     person_actual_vals = [sum_row[f"{p}_实际"] for p in RAW_PERSONS]
 
-    # 去掉描边：不再在 go.Bar 中指定 marker_line_color 与 marker_line_width
     fig_person = go.Figure(
         data=[
             go.Bar(
@@ -356,7 +366,6 @@ with c1:
 with c2:
     top_majors = calc_df.sort_values(by="实际完成", ascending=False).head(8)
     
-    # 去掉描边：不再在 update_traces 中指定 marker_line_color 与 marker_line_width
     fig_major = px.bar(
         top_majors, x="实际完成", y="专业/基础名称", orientation="h",
         title="<b>招生完成人数 Top 8 专业/基础</b>", text="实际完成",
@@ -378,12 +387,12 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度分析
+# 8. 时间维度趋势分析
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
 
-ctrl_c1, ctrl_c2, ctrl_c3 = st.columns(3)
+ctrl_c1, ctrl_c2 = st.columns(2)
 
 with ctrl_c1:
     person_mode = st.radio("选择分析视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
@@ -395,9 +404,6 @@ with ctrl_c2:
         selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=PERSONS[:3])
     else:
         selected_person_disp = "全体人员"
-
-with ctrl_c3:
-    time_granularity = st.selectbox("时间汇总粒度：", ["按日明细 (9月1日-9月7日)", "按工作日/周末 (星期维度)", "按月度走势 (累计统计)"])
 
 time_records = []
 for d_idx, d in enumerate(DATES):
@@ -414,41 +420,31 @@ for d_idx, d in enumerate(DATES):
 
 df_time_series = pd.DataFrame(time_records)
 
-if "按日明细" in time_granularity:
-    x_col = "日期"
-    category_order = DATES
-elif "工作日/周末" in time_granularity:
-    x_col = "星期"
-    category_order = WEEKDAYS
-else:
-    x_col = "月份"
-    category_order = ["2026年9月"]
-
 chart_col1, chart_col2 = st.columns(2)
 
 with chart_col1:
     if person_mode == "全体人员":
-        df_chart_line = df_time_series.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>全体人员招生趋势 ({x_col})</b>", text="新增报名数")
+        df_chart_line = df_time_series.groupby("日期", as_index=False)["新增报名数"].sum()
+        fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全体人员招生趋势 (按日明细)</b>", text="新增报名数")
         fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=2, marker=dict(size=6, color="#D50000"))
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
-        df_chart_line = df_sub.groupby(x_col, as_index=False)["新增报名数"].sum()
-        fig_line = px.line(df_chart_line, x=x_col, y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 ({x_col})</b>", text="新增报名数")
+        df_chart_line = df_sub.groupby("日期", as_index=False)["新增报名数"].sum()
+        fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 (按日明细)</b>", text="新增报名数")
         fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=2, marker=dict(size=6, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
-        df_chart_line = df_sub.groupby([x_col, "人员"], as_index=False)["新增报名数"].sum()
+        df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False)["新增报名数"].sum()
         fig_line = px.line(
-            df_chart_line, x=x_col, y="新增报名数", color="人员", markers=True, 
-            title=f"📈 <b>多人招生趋势对比 ({x_col})</b>",
+            df_chart_line, x="日期", y="新增报名数", color="人员", markers=True, 
+            title="📈 <b>多人招生趋势对比 (按日明细)</b>",
             color_discrete_sequence=px.colors.qualitative.Bold
         )
         fig_line.update_traces(line_width=2, marker=dict(size=6))
 
-    fig_line.update_xaxes(categoryorder="array", categoryarray=category_order)
+    fig_line.update_xaxes(categoryorder="array", categoryarray=DATES)
     fig_line.update_layout(
-        yaxis_title="新增报名人数", xaxis_title=x_col, hovermode="x unified",
+        yaxis_title="新增报名人数", xaxis_title="日期", hovermode="x unified",
         plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
         yaxis=dict(gridcolor="#E0E0E0")
@@ -525,7 +521,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 
     ws.merge_cells("A1:Q1")
     t_cell = ws["A1"]
-    t_cell.value = "2026年9月招生数据动态表(2026年9月1日-9月7日)"
+    t_cell.value = f"2026年招生数据动态表 ({selected_time_range})"
     t_cell.font = FONT_TITLE
     t_cell.fill = TITLE_FILL
     t_cell.alignment = ALIGN_CENTER
@@ -618,7 +614,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 def build_full_export_pack(excel_bytes, fig_dict):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr("2026年9月招生数据表.xlsx", excel_bytes)
+        zip_file.writestr(f"招生数据动态表_{selected_time_range}.xlsx", excel_bytes)
         for fig_name, fig_obj in fig_dict.items():
             try:
                 img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
@@ -648,7 +644,7 @@ with col_d1:
     st.download_button(
         label="📊 导出 Excel 动态明细表 (.xlsx)",
         data=excel_data,
-        file_name="2026年9月招生数据动态表.xlsx",
+        file_name=f"2026年招生数据动态表_{selected_time_range}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
@@ -657,7 +653,7 @@ with col_d2:
     st.download_button(
         label="📦 一键打包导出全量图表与 Excel 压缩包 (.zip)",
         data=zip_data,
-        file_name="2026年9月招生看板及图表全量导出包.zip",
+        file_name=f"2026年招生看板及图表全量导出包_{selected_time_range}.zip",
         mime="application/zip",
         use_container_width=True,
     )
