@@ -8,13 +8,31 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # -----------------------------------------------------------------------------
-# 1. 页面基本配置
+# 1. 页面基本配置与全局 UI 样式注入
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="招生数据动态管理与多维分析系统",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# 注入轻量 CSS：优化卡片阴影、阴影边框与表格容器
+st.markdown("""
+<style>
+    .stMetric {
+        background-color: #F8F9FA;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #E9ECEF;
+    }
+    div[data-testid="stForm"] {
+        border-radius: 10px;
+        background-color: #FAFAFA;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
 st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板")
@@ -46,7 +64,7 @@ if enable_anonymize:
         st.dataframe(mapping_df, hide_index=True, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 3. 基础数据定义
+# 3. 基础数据定义与初始化
 # -----------------------------------------------------------------------------
 MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
@@ -134,18 +152,18 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 4. 录入表单
+# 4. 录入表单 UI 优化
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 快捷录入新增招生")
 
-with st.sidebar.form("add_delta_form"):
+with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_date = st.selectbox("选择日期", DATES)
     input_major = st.selectbox("选择专业/基础", [m[0] for m in MAJORS])
     input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
 
-    submit_btn = st.form_submit_button("确认录入数据")
+    submit_btn = st.form_submit_button("确认录入数据", use_container_width=True)
     if submit_btn:
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
@@ -156,14 +174,14 @@ with st.sidebar.form("add_delta_form"):
         st.session_state["daily_deltas"][input_date].append(
             (input_major, target_col, int(input_val))
         )
-        st.sidebar.success(f"已成功添加：{input_date} {input_major} - {input_person_disp} +{input_val}人")
+        st.sidebar.success(f"已录入：{input_date} {input_major} - {input_person_disp} +{input_val}人")
 
-if st.sidebar.button("🔄 重置为默认演示数据"):
+if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=True):
     init_default_data()
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度切片筛选
+# 5. 时间汇总粒度切片与 KPI 顶部卡片
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -181,10 +199,10 @@ with f_col2:
         selected_dates_list = [selected_time_range]
     elif time_granularity_type == "按周（周度汇总）":
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
-        selected_dates_list = DATES  # 包含当周的所有日期
+        selected_dates_list = DATES
     else:
         selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月"])
-        selected_dates_list = DATES  # 包含当月的所有日期
+        selected_dates_list = DATES
 
 def get_processed_df_by_dates(dates_list):
     df_result = st.session_state["base_targets"].copy()
@@ -221,6 +239,20 @@ rate_row = {"专业/基础名称": "目标完成率"}
 for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
+
+# 💡【实用性优化】新增顶部 KPI 概览卡片，核心数据一目了然
+m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+with m_col1:
+    st.metric("🎯 总目标人数", f"{total_target_cum} 人")
+with m_col2:
+    st.metric("✅ 实际完成人数", f"{total_actual_cum} 人", delta=f"{sum_row['与目标之差']} 人")
+with m_col3:
+    st.metric("📈 整体完成率", f"{cum_rate_val:.2f}%")
+with m_col4:
+    avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
+    st.metric("📅 选定区间日均新增", f"{avg_per_day:.1f} 人/天")
+
+st.markdown(" ")
 
 # -----------------------------------------------------------------------------
 # 6. HTML 数据表格
@@ -263,8 +295,8 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     <meta charset="utf-8">
     <style>
         body {{ margin: 0; padding: 0; font-family: SimSun, "Times New Roman", serif; background-color: #ffffff; }}
-        .table-container {{ width: 100%; overflow-x: auto; }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #7F7F7F; }}
+        .table-container {{ width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid #7F7F7F; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; }}
         th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
         .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: bold; }}
         .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
@@ -323,7 +355,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
 st.markdown(f"### 📝 招生数据动态明细 （区间：{selected_time_range}）")
 calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range)
-st.components.v1.html(html_code, height=680, scrolling=True)
+st.components.v1.html(html_code, height=620, scrolling=True)
 
 # -----------------------------------------------------------------------------
 # 7. 可视化图表展示
@@ -358,7 +390,7 @@ with c1:
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
-        xaxis=dict(tickfont=dict(size=16)),
+        xaxis=dict(tickfont=dict(size=15)),
         yaxis=dict(gridcolor="#E0E0E0", showline=True, linewidth=1, linecolor="#000000")
     )
     st.plotly_chart(fig_person, use_container_width=True)
@@ -492,7 +524,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出 Excel / ZIP 打包
+# 9. 导出 Excel / ZIP 打包（含报错优雅容错）
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -620,7 +652,7 @@ def build_full_export_pack(excel_bytes, fig_dict):
                 img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
                 zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
             except Exception:
-                zip_file.writestr("图表导出提示.txt", "生成高分辨率PNG图片需要 kaleido 依赖包 (pip install kaleido)")
+                zip_file.writestr("图表导出说明.txt", "生成高分辨率PNG图片需要 kaleido 环境支持 (pip install kaleido)")
 
     return zip_buffer.getvalue()
 
