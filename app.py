@@ -17,36 +17,57 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入自定义 CSS：统一卡片高度，并将 stMetric 的差值标签（Delta）调整到数值右侧
+# 注入自定义 KPI 卡片 CSS 样式
 st.markdown("""
 <style>
-    /* 强制所有 KPI 卡片统一高度并布局 */
-    [data-testid="stMetric"] {
+    /* 自定义 KPI 卡片容器 */
+    .kpi-card {
         background-color: #F8F9FA;
-        padding: 16px 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #E9ECEF;
-        height: 110px;
+        border-radius: 10px;
+        padding: 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        height: 105px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
+        box-sizing: border-box;
     }
     
-    /* 核心修改：让数值（Value）与差值标签（Delta）在同一行横向排列，且底对齐 */
-    [data-testid="stMetricValue"] {
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: baseline !important;
-        gap: 12px !important;
-        width: 100% !important;
+    .kpi-title {
+        font-size: 14px;
+        color: #31333F;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
-
-    /* 差值标签样式微调，使其在右侧水平平齐 */
-    [data-testid="stMetricDelta"] {
-        margin-top: 0px !important;
-        display: inline-flex !important;
-        align-items: center !important;
+    
+    .kpi-body {
+        display: flex;
+        align-items: baseline; /* 底部基线对齐 */
+        gap: 10px;             /* 数值与右侧差值的间距 */
+    }
+    
+    .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #0E1117;
+        font-family: "Source Sans Pro", sans-serif;
+        line-height: 1;
+    }
+    
+    /* 差值标签放在右侧的样式 */
+    .kpi-delta {
+        font-size: 13px;
+        font-weight: 600;
+        color: #FF2B2B;
+        background-color: #FFE6E6;
+        padding: 2px 8px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
     }
 
     /* 优化侧边栏 Form 边框 */
@@ -204,7 +225,7 @@ if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=Tru
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度筛选与右侧平齐对齐的 KPI 卡片
+# 5. 时间汇总粒度筛选与纯 HTML 渲染的 KPI 卡片（绝对不会溢出/错位）
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -263,17 +284,52 @@ for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
-# 顶部 KPI 概览卡片（差值标签已移至右侧且底部完美对齐）
+avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
+
+# 用 HTML 自定义渲染卡片，解决 st.metric 无法把 delta 靠右的问题
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+
 with m_col1:
-    st.metric("🎯 总目标人数", f"{total_target_cum} 人")
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">🎯 总目标人数</div>
+        <div class="kpi-body">
+            <div class="kpi-value">{total_target_cum} 人</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with m_col2:
-    st.metric("✅ 实际完成人数", f"{total_actual_cum} 人", delta=f"{sum_row['与目标之差']} 人")
+    diff_val = sum_row['与目标之差']
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">✅ 实际完成人数</div>
+        <div class="kpi-body">
+            <div class="kpi-value">{total_actual_cum} 人</div>
+            <div class="kpi-delta">↓ {diff_val} 人</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with m_col3:
-    st.metric("📈 整体完成率", f"{cum_rate_val:.2f}%")
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">📈 整体完成率</div>
+        <div class="kpi-body">
+            <div class="kpi-value">{cum_rate_val:.2f}%</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with m_col4:
-    avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
-    st.metric("📅 选定区间日均新增", f"{avg_per_day:.1f} 人/天")
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">📅 选定区间日均新增</div>
+        <div class="kpi-body">
+            <div class="kpi-value">{avg_per_day:.1f} 人/天</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown(" ")
 
