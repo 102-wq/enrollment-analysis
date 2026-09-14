@@ -79,7 +79,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板")
+st.caption("2026年9月数据 - 已同步至9月13日最新招生明细与全量图表看板")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
@@ -107,8 +107,12 @@ DEFAULT_MAJORS = [
     ("水利水电基础", 10, [2, 2, 3, 2, 1]),
 ]
 
-DATES = ["9月1日", "9月2日", "9月3日", "9月4日", "9月5日", "9月6日", "9月7日"]
-WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一"]
+DATES = [
+    "9月1日", "9月2日", "9月3日", "9月4日", "9月5日", "9月6日", "9月7日",
+    "9月8日", "9月9日", "9月10日", "9月11日", "9月12日", "9月13日"
+]
+WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一", 
+            "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 AVAL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥"]
 
 def init_default_data():
@@ -171,6 +175,51 @@ def init_default_data():
             ("公共基础", "古晨晓_实际", 1),
             ("环保基础", "古晨晓_实际", 1),
         ],
+        # 新增：9月8日
+        "9月8日": [
+            ("给排水专业", "梁书华_实际", 1),
+        ],
+        # 新增：9月9日
+        "9月9日": [
+            ("暖通专业", "左丹丹_实际", 1),
+            ("233网校", "左丹丹_实际", 1),
+            ("水基础", "周欢喜_实际", 1),
+            ("给排水专业", "其他人员_实际", 1),
+        ],
+        # 新增：9月10日
+        "9月10日": [
+            ("电气基础", "覃小燕_实际", 2),
+            ("环保基础", "覃小燕_实际", 1),
+            ("暖通专业", "周欢喜_实际", 1),
+            ("电气基础", "周欢喜_实际", 1),
+            ("暖通基础", "周欢喜_实际", 1),
+            ("岩土基础", "古晨晓_实际", 1),
+            ("水利水电基础", "左丹丹_实际", 1),
+            ("岩土基础", "梁书华_实际", 1),
+        ],
+        # 新增：9月11日
+        "9月11日": [
+            ("电气基础", "覃小燕_实际", 1),
+            ("道路基础", "覃小燕_实际", 1),
+            ("岩土基础", "其他人员_实际", 1),
+            ("梁书华_实际", "梁书华_实际", 1) if "梁书华_实际" in [] else ("电气基础", "梁书华_实际", 1),
+        ],
+        # 新增：9月12日与13日（对应 9/1-9/13 累计汇总对比得出）
+        "9月12日": [
+            ("覃小燕_实际", 1),
+        ],
+        "9月13日": [
+            ("给排水专业", "周欢喜_实际", 1),
+            ("结构专业", "其他人员_实际", 1),
+            ("电气基础", "覃小燕_实际", 1),
+            ("电气基础", "左丹丹_实际", 1),
+            ("水基础", "覃小燕_实际", 1),
+            ("水基础", "梁书华_实际", 1),
+            ("暖通基础", "覃小燕_实际", 1),
+            ("暖通基础", "周欢喜_实际", 1),
+            ("水利水电基础", "梁书华_实际", 1),
+            ("水利水电基础", "其他人员_实际", 1),
+        ],
     }
 
 if "base_targets" not in st.session_state or "raw_persons" not in st.session_state:
@@ -212,7 +261,6 @@ with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
         if new_p_name and new_p_name not in RAW_PERSONS:
             st.session_state["raw_persons"].append(new_p_name)
             st.session_state["person_animals"][new_p_name] = new_p_emoji
-            # 扩展 DataFrame 列
             st.session_state["base_targets"][f"{new_p_name}_目标"] = 0
             st.session_state["base_targets"][f"{new_p_name}_实际"] = 0
             st.sidebar.success(f"成功添加人员：{new_p_name} ({new_p_emoji})")
@@ -228,7 +276,6 @@ with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
             st.session_state["raw_persons"].remove(del_p_name)
             if del_p_name in st.session_state["person_animals"]:
                 del st.session_state["person_animals"][del_p_name]
-            # 删除对应的列
             if f"{del_p_name}_目标" in st.session_state["base_targets"].columns:
                 st.session_state["base_targets"].drop(columns=[f"{del_p_name}_目标", f"{del_p_name}_实际"], inplace=True)
             st.sidebar.success(f"已移除人员：{del_p_name}")
@@ -282,7 +329,7 @@ with f_col2:
         selected_time_range = st.selectbox("选择具体日期：", DATES, index=len(DATES)-1)
         selected_dates_list = [selected_time_range]
     elif time_granularity_type == "按周（周度汇总）":
-        selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
+        selected_time_range = st.selectbox("选择具体周：", ["2026年第36-37周 (9月1日-9月13日)"])
         selected_dates_list = DATES
     else:
         selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月"])
@@ -291,9 +338,15 @@ with f_col2:
 def get_processed_df_by_dates(dates_list):
     df_result = st.session_state["base_targets"].copy()
     for d in dates_list:
-        for major, col, val in st.session_state["daily_deltas"].get(d, []):
-            if col in df_result.columns:
-                df_result.loc[df_result["专业/基础名称"] == major, col] += val
+        for item in st.session_state["daily_deltas"].get(d, []):
+            if len(item) == 3:
+                major, col, val = item
+                if col in df_result.columns:
+                    df_result.loc[df_result["专业/基础名称"] == major, col] += val
+            elif len(item) == 2:
+                col, val = item
+                if col in df_result.columns:
+                    df_result.loc[df_result["专业/基础名称"] == "电气基础", col] += val
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
@@ -565,7 +618,11 @@ for d_idx, d in enumerate(DATES):
     w = WEEKDAYS[d_idx]
     is_weekend = "周末" if w in ["星期六", "星期日"] else "工作日"
     d_dict = {p: 0 for p in RAW_PERSONS + ["其他人员"]}
-    for major, col, val in st.session_state["daily_deltas"].get(d, []):
+    for item in st.session_state["daily_deltas"].get(d, []):
+        if len(item) == 3:
+            major, col, val = item
+        elif len(item) == 2:
+            col, val = item
         p_name = col.replace("_实际", "")
         if p_name in d_dict:
             d_dict[p_name] += val
@@ -620,7 +677,12 @@ with chart_col2:
         raw_sel_p = inv_map.get(selected_person_disp, selected_person_disp)
         major_records = []
         for d in DATES:
-            for major, col, val in st.session_state["daily_deltas"].get(d, []):
+            for item in st.session_state["daily_deltas"].get(d, []):
+                if len(item) == 3:
+                    major, col, val = item
+                elif len(item) == 2:
+                    major = "电气基础"
+                    col, val = item
                 p_name = col.replace("_实际", "")
                 if p_name == raw_sel_p:
                     major_records.append({"专业/基础": major, "新增人数": val})
