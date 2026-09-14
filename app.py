@@ -17,16 +17,23 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入轻量 CSS：优化卡片阴影、阴影边框与表格容器
+# 注入 CSS：通过 Flex 布局拉伸与固定高度对齐，解决底部卡片不平齐问题
 st.markdown("""
 <style>
-    .stMetric {
+    /* 强制所有 metric 列的容器高度拉伸对齐 */
+    [data-testid="stMetric"] {
         background-color: #F8F9FA;
         padding: 15px;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #E9ECEF;
+        height: 110px; /* 固定卡片统一高度 */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
+    
+    /* 优化侧边栏 Form 边框 */
     div[data-testid="stForm"] {
         border-radius: 10px;
         background-color: #FAFAFA;
@@ -152,7 +159,7 @@ if "base_targets" not in st.session_state or "daily_deltas" not in st.session_st
     init_default_data()
 
 # -----------------------------------------------------------------------------
-# 4. 录入表单 UI 优化
+# 4. 录入表单 UI
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 快捷录入新增招生")
@@ -181,7 +188,7 @@ if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=Tru
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度切片与 KPI 顶部卡片
+# 5. 时间汇总粒度筛选与对齐的 KPI 卡片
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -240,7 +247,7 @@ for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
-# 💡【实用性优化】新增顶部 KPI 概览卡片，核心数据一目了然
+# 顶部 KPI 概览卡片（CSS 已修复对齐）
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 with m_col1:
     st.metric("🎯 总目标人数", f"{total_target_cum} 人")
@@ -524,7 +531,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出 Excel / ZIP 打包（含报错优雅容错）
+# 9. 导出 Excel / ZIP 打包
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
