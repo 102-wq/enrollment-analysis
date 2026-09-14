@@ -224,7 +224,6 @@ RAW_PERSONS = st.session_state["raw_persons"]
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
-# 【核心修改】将默认值 value 设为 True，默认直接使用动物代替姓名
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
 
 alias_map = {}
@@ -355,7 +354,7 @@ total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
 
-rate_row = {"专业/基础名称": "2026年8月目标人数完成比例"}
+rate_row = {"专业/基础名称": "目标人数完成比例"}
 for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
@@ -699,7 +698,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. Excel 导出 (包含动物符号)
+# 9. Excel 导出 (包含动物符号及格式化渲染)
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -822,8 +821,10 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.fill = TOTAL_ROW_BG
         curr_r += 1
 
+    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=total_cols - 2)
     ws.cell(row=curr_r, column=total_cols - 1, value=rate_row["专业/基础名称"]).font = FONT_HEADER
     ws.cell(row=curr_r, column=total_cols, value=rate_row["实际完成"]).font = FONT_HEADER
+    
     for c in range(1, total_cols + 1):
         cell = ws.cell(row=curr_r, column=c)
         cell.alignment = ALIGN_CENTER
@@ -834,49 +835,14 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     wb.save(output)
     return output.getvalue()
 
-def build_full_export_pack(excel_bytes, fig_dict):
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr(f"招生数据动态表_{selected_time_range}.xlsx", excel_bytes)
-        for fig_name, fig_obj in fig_dict.items():
-            try:
-                img_bytes = fig_obj.to_image(format="png", width=1200, height=700, scale=2)
-                zip_file.writestr(f"导出图表_{fig_name}.png", img_bytes)
-            except Exception:
-                zip_file.writestr("图表导出说明.txt", "生成高分辨率PNG图片需要 kaleido 环境支持 (pip install kaleido)")
-
-    return zip_buffer.getvalue()
-
 st.markdown("---")
-st.markdown("### 📥 结果导出与报表生成")
+st.markdown("### 📥 数据导出")
 
 excel_data = export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS)
-
-fig_collection = {
-    "1_各人员目标实际对比柱状图": fig_person,
-    "2_Top8专业完成横柱图": fig_major,
-    "3_招生动态趋势折线图": fig_line,
-    "4_多维构成占比饼图": fig_pie,
-}
-
-zip_data = build_full_export_pack(excel_data, fig_collection)
-
-col_d1, col_d2 = st.columns(2)
-
-with col_d1:
-    st.download_button(
-        label="📊 导出 Excel 动态明细表 (.xlsx)",
-        data=excel_data,
-        file_name=f"2026年招生数据动态表_{selected_time_range}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
-
-with col_d2:
-    st.download_button(
-        label="📦 一键打包导出全量图表与 Excel 压缩包 (.zip)",
-        data=zip_data,
-        file_name=f"2026年招生看板及图表全量导出包_{selected_time_range}.zip",
-        mime="application/zip",
-        use_container_width=True,
-    )
+st.download_button(
+    label="📥 导出带样式的 Excel 报表",
+    data=excel_data,
+    file_name=f"2026年9月招生数据动态表_{selected_time_range}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True
+)
