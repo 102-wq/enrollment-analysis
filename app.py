@@ -75,13 +75,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 底部【与目标之差】与合计数据 100% 完美对齐版")
+st.caption("2026年9月数据 - 默认动物头像全脱敏模式")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 基础数据定义与 Session State 初始化（极精准校验矩阵）
+# 2. 基础数据定义与 Session State 初始化
 # -----------------------------------------------------------------------------
-# 格式: (专业/基础名称, 目标人数, [覃小燕, 左丹丹, 梁书华, 古晨晓, 周欢喜])
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
     ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -98,8 +97,8 @@ DEFAULT_MAJORS = [
     ("岩土基础", 36, [9, 8, 7, 6, 6]),
     ("水基础", 17, [4, 4, 5, 2, 2]),
     ("暖通基础", 27, [5, 5, 4, 4, 9]),
-    ("结构基础", 9, [2, 2, 1, 2, 1]),  # 修正：古晨晓结构基础目标调为2
-    ("公共基础", 4, [2, 1, 1, 0, 1]),  # 修正：周欢喜公共基础目标调为1
+    ("结构基础", 9, [2, 2, 1, 2, 1]),
+    ("公共基础", 4, [2, 1, 1, 0, 1]),
     ("道路基础", 6, [1, 1, 1, 1, 2]),
     ("水利水电基础", 10, [2, 2, 3, 2, 1]),
 ]
@@ -128,7 +127,6 @@ def init_default_data():
         base_data.append(row)
     st.session_state["base_targets"] = pd.DataFrame(base_data)
 
-    # 每日增量录入
     st.session_state["daily_deltas"] = {
         "9月1日": [("电气基础", "覃小燕_实际", 1)],
         "9月2日": [
@@ -222,11 +220,12 @@ if "base_targets" not in st.session_state or "raw_persons" not in st.session_sta
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 3. 侧边栏：人员管理与脱敏配置
+# 3. 侧边栏：脱敏管理（默认开启动物代称模式）
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=False)
+# 【核心修改】将默认值 value 设为 True，默认直接使用动物代替姓名
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
 
 alias_map = {}
 for p in RAW_PERSONS:
@@ -238,55 +237,40 @@ for p in RAW_PERSONS:
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
 if enable_anonymize:
-    with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
+    with st.sidebar.expander("👁️ 视角对照表（管理者隐私预览）", expanded=False):
         mapping_df = pd.DataFrame({
             "真实姓名": RAW_PERSONS,
-            "展示图像": PERSONS
+            "代称动物": PERSONS
         })
         st.dataframe(mapping_df, hide_index=True, use_container_width=True)
 
-with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
+with st.sidebar.expander("👥 人员增删管理"):
     st.caption("新增人员")
     new_p_name = st.text_input("姓名", placeholder="例如：张三", key="new_person_name_input")
     new_p_emoji = st.selectbox("分配动物标志", AVAL_ANIMALS, key="new_person_emoji_input")
     
-    if st.button("➕ 确认新增人员", use_container_width=True):
+    if st.button("➕ 确认新增", use_container_width=True):
         if new_p_name and new_p_name not in RAW_PERSONS:
             st.session_state["raw_persons"].append(new_p_name)
             st.session_state["person_animals"][new_p_name] = new_p_emoji
             st.session_state["base_targets"][f"{new_p_name}_目标"] = 0
             st.session_state["base_targets"][f"{new_p_name}_实际"] = 0
-            st.sidebar.success(f"成功添加人员：{new_p_name} ({new_p_emoji})")
-            st.rerun()
-        elif new_p_name in RAW_PERSONS:
-            st.sidebar.warning("该人员姓名已存在！")
-            
-    st.markdown("---")
-    st.caption("删减人员")
-    if len(RAW_PERSONS) > 0:
-        del_p_name = st.selectbox("选择要移除的人员", RAW_PERSONS, key="del_person_select")
-        if st.button("🗑️ 确认移除人员", use_container_width=True):
-            st.session_state["raw_persons"].remove(del_p_name)
-            if del_p_name in st.session_state["person_animals"]:
-                del st.session_state["person_animals"][del_p_name]
-            if f"{del_p_name}_目标" in st.session_state["base_targets"].columns:
-                st.session_state["base_targets"].drop(columns=[f"{del_p_name}_目标", f"{del_p_name}_实际"], inplace=True)
-            st.sidebar.success(f"已移除人员：{del_p_name}")
+            st.sidebar.success(f"已添加：{new_p_name} ({new_p_emoji})")
             st.rerun()
 
 # -----------------------------------------------------------------------------
 # 4. 快捷录入新增招生
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.subheader("➕ 快捷录入新增招生")
+st.sidebar.subheader("➕ 快捷录入招生")
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
-    input_date = st.selectbox("选择日期", DATES)
-    input_major = st.selectbox("选择专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
-    input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
+    input_date = st.selectbox("日期", DATES)
+    input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
+    input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
 
-    submit_btn = st.form_submit_button("确认录入数据", use_container_width=True)
+    submit_btn = st.form_submit_button("确认录入", use_container_width=True)
     if submit_btn:
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
@@ -300,7 +284,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         st.sidebar.success(f"已录入：{input_date} {input_major} - {input_person_disp} +{input_val}人")
         st.rerun()
 
-if st.sidebar.button("🔄 重置/刷新为最新数据", use_container_width=True):
+if st.sidebar.button("🔄 重置全表数据", use_container_width=True):
     init_default_data()
     st.sidebar.info("数据已成功重置！")
     st.rerun()
@@ -378,7 +362,6 @@ rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
-# KPI 展现
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
 with m_col1:
@@ -426,7 +409,7 @@ with m_col4:
 st.markdown(" ")
 
 # -----------------------------------------------------------------------------
-# 6. HTML 数据表格 (精准复刻 Excel 底部差值)
+# 6. HTML 数据表格渲染 (表头直接显示动物代称)
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -473,7 +456,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
         .bg-title {{ background-color: #D9EAD3; font-size: 16px; font-weight: bold; padding: 8px 0; }}
         .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
-        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 15px; }}
+        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 16px; }}
         .bg-total {{ background-color: #D9EAD3; font-weight: bold; }}
         .num {{ font-family: "Times New Roman", serif; }}
         .zh {{ font-family: SimSun, serif; }}
@@ -529,7 +512,7 @@ html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, R
 st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 7. 可视化图表展示
+# 7. 可视化图表展示 (包含动物符号)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 基础指标分析")
@@ -561,7 +544,7 @@ with c1:
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
         margin=dict(l=20, r=20, t=50, b=20),
-        xaxis=dict(tickfont=dict(size=15)),
+        xaxis=dict(tickfont=dict(size=16)),
         yaxis=dict(gridcolor="#E0E0E0", showline=True, linewidth=1, linecolor="#000000")
     )
     st.plotly_chart(fig_person, use_container_width=True)
@@ -590,7 +573,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度趋势分析
+# 8. 时间维度趋势分析与导出支持
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -716,7 +699,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 导出 Excel / ZIP 打包
+# 9. Excel 导出 (包含动物符号)
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -731,7 +714,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 
     FONT_TITLE = Font(name="SimSun", size=14, bold=True)
     FONT_HEADER = Font(name="SimSun", size=10, bold=True)
-    FONT_ANIMAL = Font(name="SimSun", size=12, bold=True)
+    FONT_ANIMAL = Font(name="Segoe UI Emoji", size=12, bold=True)
     FONT_BODY_NUM = Font(name="Times New Roman", size=10)
     FONT_BODY_ZH = Font(name="SimSun", size=10)
 
