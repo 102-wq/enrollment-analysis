@@ -83,34 +83,9 @@ st.caption("2026年9月数据 - 已同步最新招生明细与全量图表看板
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 侧边栏：纯动物图像脱敏配置
+# 2. 基础数据定义与 Session State 初始化
 # -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ 数据管理与设置")
-
-RAW_PERSONS = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
-ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯"]
-
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=True)
-
-if enable_anonymize:
-    alias_map = {p: ANIMALS[i] for i, p in enumerate(RAW_PERSONS)}
-else:
-    alias_map = {p: p for p in RAW_PERSONS}
-
-PERSONS = [alias_map[p] for p in RAW_PERSONS]
-
-if enable_anonymize:
-    with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
-        mapping_df = pd.DataFrame({
-            "真实姓名": RAW_PERSONS,
-            "展示图像": PERSONS
-        })
-        st.dataframe(mapping_df, hide_index=True, use_container_width=True)
-
-# -----------------------------------------------------------------------------
-# 3. 基础数据定义与初始化
-# -----------------------------------------------------------------------------
-MAJORS = [
+DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
     ("发输电专业", 10, [2, 3, 2, 1, 2]),
     ("供配电专业", 11, [3, 4, 2, 1, 1]),
@@ -134,12 +109,18 @@ MAJORS = [
 
 DATES = ["9月1日", "9月2日", "9月3日", "9月4日", "9月5日", "9月6日", "9月7日"]
 WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一"]
+AVAL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥"]
 
 def init_default_data():
+    st.session_state["raw_persons"] = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
+    st.session_state["person_animals"] = {
+        "覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"
+    }
+
     base_data = []
-    for idx, (name, total_target, person_tgts) in enumerate(MAJORS, 1):
+    for idx, (name, total_target, person_tgts) in enumerate(DEFAULT_MAJORS, 1):
         row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
-        for p, tgt in zip(RAW_PERSONS, person_tgts):
+        for p, tgt in zip(st.session_state["raw_persons"], person_tgts):
             row[f"{p}_目标"] = tgt
             row[f"{p}_实际"] = 0
         row["其他人员_实际"] = 0
@@ -192,18 +173,76 @@ def init_default_data():
         ],
     }
 
-if "base_targets" not in st.session_state or "daily_deltas" not in st.session_state:
+if "base_targets" not in st.session_state or "raw_persons" not in st.session_state:
     init_default_data()
 
+RAW_PERSONS = st.session_state["raw_persons"]
+
 # -----------------------------------------------------------------------------
-# 4. 录入表单 UI
+# 3. 侧边栏：人员管理（新增/删除）与纯动物图像脱敏配置
+# -----------------------------------------------------------------------------
+st.sidebar.title("🛠️ 数据管理与设置")
+
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=True)
+
+alias_map = {}
+for p in RAW_PERSONS:
+    if enable_anonymize:
+        alias_map[p] = st.session_state["person_animals"].get(p, "🐱")
+    else:
+        alias_map[p] = p
+
+PERSONS = [alias_map[p] for p in RAW_PERSONS]
+
+if enable_anonymize:
+    with st.sidebar.expander("👁️ 视角对照图表（仅管理者可见）", expanded=False):
+        mapping_df = pd.DataFrame({
+            "真实姓名": RAW_PERSONS,
+            "展示图像": PERSONS
+        })
+        st.dataframe(mapping_df, hide_index=True, use_container_width=True)
+
+# 人员新增/删除管理区
+with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
+    st.caption("新增人员")
+    new_p_name = st.text_input("姓名", placeholder="例如：张三", key="new_person_name_input")
+    new_p_emoji = st.selectbox("分配动物标志", AVAL_ANIMALS, key="new_person_emoji_input")
+    
+    if st.button("➕ 确认新增人员", use_container_width=True):
+        if new_p_name and new_p_name not in RAW_PERSONS:
+            st.session_state["raw_persons"].append(new_p_name)
+            st.session_state["person_animals"][new_p_name] = new_p_emoji
+            # 扩展 DataFrame 列
+            st.session_state["base_targets"][f"{new_p_name}_目标"] = 0
+            st.session_state["base_targets"][f"{new_p_name}_实际"] = 0
+            st.sidebar.success(f"成功添加人员：{new_p_name} ({new_p_emoji})")
+            st.rerun()
+        elif new_p_name in RAW_PERSONS:
+            st.sidebar.warning("该人员姓名已存在！")
+            
+    st.markdown("---")
+    st.caption("删减人员")
+    if len(RAW_PERSONS) > 0:
+        del_p_name = st.selectbox("选择要移除的人员", RAW_PERSONS, key="del_person_select")
+        if st.button("🗑️ 确认移除人员", use_container_width=True):
+            st.session_state["raw_persons"].remove(del_p_name)
+            if del_p_name in st.session_state["person_animals"]:
+                del st.session_state["person_animals"][del_p_name]
+            # 删除对应的列
+            if f"{del_p_name}_目标" in st.session_state["base_targets"].columns:
+                st.session_state["base_targets"].drop(columns=[f"{del_p_name}_目标", f"{del_p_name}_实际"], inplace=True)
+            st.sidebar.success(f"已移除人员：{del_p_name}")
+            st.rerun()
+
+# -----------------------------------------------------------------------------
+# 4. 快捷新增数据录入
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 快捷录入新增招生")
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_date = st.selectbox("选择日期", DATES)
-    input_major = st.selectbox("选择专业/基础", [m[0] for m in MAJORS])
+    input_major = st.selectbox("选择专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("选择归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
 
@@ -223,9 +262,10 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
 if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=True):
     init_default_data()
     st.sidebar.info("数据已重置！")
+    st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度筛选与纯 HTML 渲染的 KPI 卡片（绝对不会溢出/错位）
+# 5. 时间汇总粒度筛选与纯 HTML 渲染的 KPI 卡片
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -252,7 +292,8 @@ def get_processed_df_by_dates(dates_list):
     df_result = st.session_state["base_targets"].copy()
     for d in dates_list:
         for major, col, val in st.session_state["daily_deltas"].get(d, []):
-            df_result.loc[df_result["专业/基础名称"] == major, col] += val
+            if col in df_result.columns:
+                df_result.loc[df_result["专业/基础名称"] == major, col] += val
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
@@ -286,7 +327,7 @@ rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
-# 用 HTML 自定义渲染卡片，解决 st.metric 无法把 delta 靠右的问题
+# 用 HTML 自定义渲染卡片
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
 with m_col1:
@@ -367,6 +408,8 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         sum_person_cells += f'<td class="bg-total num">{sum_r[f"{rp}_目标"]}</td><td class="bg-total num">{sum_r[f"{rp}_实际"]}</td>'
         diff_person_cells += f'<td class="bg-total"></td><td class="bg-total num">{diff_r[f"{rp}_实际"]}</td>'
 
+    total_colspan = 7 + len(p_names) * 2
+
     full_html = f"""
     <!DOCTYPE html>
     <html>
@@ -388,7 +431,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     <body>
     <div class="table-container">
     <table>
-        <tr><td colspan="17" class="bg-title">2026年招生数据动态表 ({range_title})</td></tr>
+        <tr><td colspan="{total_colspan}" class="bg-title">2026年招生数据动态表 ({range_title})</td></tr>
         <tr>
             <th rowspan="2" class="bg-header">序号</th>
             <th rowspan="2" class="bg-header">专业/基础名称</th>
@@ -512,7 +555,8 @@ with ctrl_c2:
     if person_mode == "单人独立分析":
         selected_person_disp = st.selectbox("选择分析成员：", PERSONS + ["其他人员"])
     elif person_mode == "多人员对比分析":
-        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=PERSONS[:3])
+        default_sel = PERSONS[:3] if len(PERSONS) >= 3 else PERSONS
+        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=default_sel)
     else:
         selected_person_disp = "全体人员"
 
@@ -523,7 +567,8 @@ for d_idx, d in enumerate(DATES):
     d_dict = {p: 0 for p in RAW_PERSONS + ["其他人员"]}
     for major, col, val in st.session_state["daily_deltas"].get(d, []):
         p_name = col.replace("_实际", "")
-        d_dict[p_name] += val
+        if p_name in d_dict:
+            d_dict[p_name] += val
     
     for p_name, val in d_dict.items():
         disp_p_name = alias_map.get(p_name, p_name)
@@ -630,7 +675,8 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     )
     ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
 
-    ws.merge_cells("A1:Q1")
+    total_cols = 7 + len(raw_persons) * 2
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
     t_cell = ws["A1"]
     t_cell.value = f"2026年招生数据动态表 ({selected_time_range})"
     t_cell.font = FONT_TITLE
@@ -654,22 +700,25 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         ws.cell(row=3, column=col_idx + 1, value="实际")
         col_idx += 2
 
-    ws.merge_cells("N2:N3")
-    ws["N2"] = "其他人员"
-    ws.merge_cells("O2:O3")
-    ws["O2"] = "目标人数"
-    ws.merge_cells("P2:P3")
-    ws["P2"] = "实际完成"
-    ws.merge_cells("Q2:Q3")
-    ws["Q2"] = "与目标之差"
+    other_col = col_idx
+    ws.merge_cells(start_row=2, start_column=other_col, end_row=3, end_column=other_col)
+    ws.cell(row=2, column=other_col, value="其他人员")
+    
+    ws.merge_cells(start_row=2, start_column=other_col+1, end_row=3, end_column=other_col+1)
+    ws.cell(row=2, column=other_col+1, value="目标人数")
+    
+    ws.merge_cells(start_row=2, start_column=other_col+2, end_row=3, end_column=other_col+2)
+    ws.cell(row=2, column=other_col+2, value="实际完成")
+    
+    ws.merge_cells(start_row=2, start_column=other_col+3, end_row=3, end_column=other_col+3)
+    ws.cell(row=2, column=other_col+3, value="与目标之差")
 
     for r in range(2, 4):
-        for c in range(1, 18):
+        for c in range(1, total_cols + 1):
             cell = ws.cell(row=r, column=c)
             if not cell.fill.start_color.rgb:
                 cell.fill = HEADER_BG
-            if not (r == 2 and c in range(4, 14, 2)):
-                cell.font = FONT_HEADER
+            cell.font = FONT_HEADER
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
 
@@ -690,7 +739,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         ws.cell(row=curr_r, column=c_offset + 2, value=row["实际完成"]).font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 3, value=row["与目标之差"]).font = FONT_BODY_NUM
 
-        for c in range(1, 18):
+        for c in range(1, total_cols + 1):
             cell = ws.cell(row=curr_r, column=c)
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
@@ -711,7 +760,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         ws.cell(row=curr_r, column=c_offset + 2, value=r_data.get("实际完成", "")).font = FONT_HEADER
         ws.cell(row=curr_r, column=c_offset + 3, value=r_data.get("与目标之差", "")).font = FONT_HEADER
 
-        for c in range(1, 18):
+        for c in range(1, total_cols + 1):
             cell = ws.cell(row=curr_r, column=c)
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
