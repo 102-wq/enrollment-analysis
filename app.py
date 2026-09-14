@@ -20,7 +20,6 @@ st.set_page_config(
 # 注入自定义 KPI 卡片 CSS 样式
 st.markdown("""
 <style>
-    /* 自定义 KPI 卡片容器 */
     .kpi-card {
         background-color: #F8F9FA;
         border: 1px solid #E9ECEF;
@@ -45,8 +44,8 @@ st.markdown("""
     
     .kpi-body {
         display: flex;
-        align-items: baseline; /* 底部基线对齐 */
-        gap: 10px;             /* 数值与右侧差值的间距 */
+        align-items: baseline;
+        gap: 10px;
     }
     
     .kpi-value {
@@ -57,7 +56,6 @@ st.markdown("""
         line-height: 1;
     }
     
-    /* 差值标签放在右侧的样式 */
     .kpi-delta {
         font-size: 13px;
         font-weight: 600;
@@ -70,7 +68,6 @@ st.markdown("""
         white-space: nowrap;
     }
 
-    /* 优化侧边栏 Form 边框 */
     div[data-testid="stForm"] {
         border-radius: 10px;
         background-color: #FAFAFA;
@@ -79,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 已同步至9月13日最新招生明细与全量图表看板")
+st.caption("2026年9月数据 - 已全量校对同步至 9月13日 最新明细")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
@@ -131,6 +128,7 @@ def init_default_data():
         base_data.append(row)
     st.session_state["base_targets"] = pd.DataFrame(base_data)
 
+    # 全量完整新增明细表（严格匹配 1-13 日）
     st.session_state["daily_deltas"] = {
         "9月1日": [("电气基础", "覃小燕_实际", 1)],
         "9月2日": [
@@ -174,6 +172,7 @@ def init_default_data():
             ("暖通基础", "梁书华_实际", 1),
             ("公共基础", "古晨晓_实际", 1),
             ("环保基础", "古晨晓_实际", 1),
+            ("结构基础", "其他人员_实际", 2),
         ],
         "9月8日": [
             ("给排水专业", "梁书华_实际", 1),
@@ -223,7 +222,7 @@ if "base_targets" not in st.session_state or "raw_persons" not in st.session_sta
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 3. 侧边栏：人员管理（新增/删除）与纯动物图像脱敏配置
+# 3. 侧边栏：人员管理与脱敏配置
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
@@ -246,7 +245,6 @@ if enable_anonymize:
         })
         st.dataframe(mapping_df, hide_index=True, use_container_width=True)
 
-# 人员新增/删除管理区
 with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
     st.caption("新增人员")
     new_p_name = st.text_input("姓名", placeholder="例如：张三", key="new_person_name_input")
@@ -277,7 +275,7 @@ with st.sidebar.expander("👥 人员名单管理（新增 / 删减）"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 4. 快捷新增数据录入
+# 4. 快捷录入新增招生
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ 快捷录入新增招生")
@@ -293,21 +291,22 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
         
-        target_col = f"{raw_person_name}_实际"
+        target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
         if input_date not in st.session_state["daily_deltas"]:
             st.session_state["daily_deltas"][input_date] = []
         st.session_state["daily_deltas"][input_date].append(
             (input_major, target_col, int(input_val))
         )
         st.sidebar.success(f"已录入：{input_date} {input_major} - {input_person_disp} +{input_val}人")
+        st.rerun()
 
-if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=True):
+if st.sidebar.button("🔄 重置/刷新为最新数据", use_container_width=True):
     init_default_data()
-    st.sidebar.info("数据已重置！")
+    st.sidebar.info("数据已成功重置并同步至最新！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度筛选与纯 HTML 渲染的 KPI 卡片
+# 5. 时间汇总粒度筛选与 KPI 渲染 (修复数据对不齐问题)
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -316,7 +315,7 @@ f_col1, f_col2 = st.columns(2)
 with f_col1:
     time_granularity_type = st.selectbox(
         "选择时间汇总粒度：",
-        ["按日（单日切片）", "按周（周度汇总）", "按月（月度全量）"]
+        ["按月（月度全量）", "按周（周度汇总）", "按日（单日切片）"]
     )
 
 with f_col2:
@@ -327,11 +326,18 @@ with f_col2:
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36-37周 (9月1日-9月13日)"])
         selected_dates_list = DATES
     else:
-        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月"])
+        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月 (截止9月13日)"])
         selected_dates_list = DATES
 
+# 完美数据计算逻辑
 def get_processed_df_by_dates(dates_list):
     df_result = st.session_state["base_targets"].copy()
+    
+    # 将实际完成列初始化为 0
+    act_cols = [c for c in df_result.columns if c.endswith("_实际")]
+    for col in act_cols:
+        df_result[col] = 0
+
     for d in dates_list:
         for item in st.session_state["daily_deltas"].get(d, []):
             if len(item) == 3:
@@ -375,7 +381,7 @@ rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
-# 用 HTML 自定义渲染卡片
+# KPI 展现
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
 with m_col1:
@@ -589,7 +595,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度趋势分析（重点修复：保证绝对按时间线正序绘制，解决首尾穿梭 BUG）
+# 8. 时间维度趋势分析（彻底解决首尾穿梭 BUG）
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -634,7 +640,7 @@ with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby("日期", as_index=False)["新增报名数"].sum()
         
-        # 🌟【BUG 核心修复 1】：强制将【日期】设为有序分类类型并进行正序排列
+        # 🌟【BUG 核心修复】：利用 pd.Categorical 约束排序，避免首尾交叉穿梭
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values("日期").reset_index(drop=True)
 
@@ -645,7 +651,6 @@ with chart_col1:
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby("日期", as_index=False)["新增报名数"].sum()
         
-        # 🌟【BUG 核心修复 2】：单人数据强制时间排序
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values("日期").reset_index(drop=True)
 
@@ -655,7 +660,6 @@ with chart_col1:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False)["新增报名数"].sum()
         
-        # 🌟【BUG 核心修复 3】：多人对比数据强制时间排序
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values(["日期", "人员"]).reset_index(drop=True)
 
