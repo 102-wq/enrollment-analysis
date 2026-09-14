@@ -17,22 +17,38 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入 CSS：通过 Flex 布局拉伸与固定高度对齐，解决底部卡片不平齐问题
+# 注入自定义 CSS：统一卡片高度，并将 stMetric 的差值标签（Delta）调整到数值右侧
 st.markdown("""
 <style>
-    /* 强制所有 metric 列的容器高度拉伸对齐 */
+    /* 强制所有 KPI 卡片统一高度并布局 */
     [data-testid="stMetric"] {
         background-color: #F8F9FA;
-        padding: 15px;
+        padding: 16px 20px;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #E9ECEF;
-        height: 110px; /* 固定卡片统一高度 */
+        height: 110px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
     }
     
+    /* 核心修改：让数值（Value）与差值标签（Delta）在同一行横向排列，且底对齐 */
+    [data-testid="stMetricValue"] {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: baseline !important;
+        gap: 12px !important;
+        width: 100% !important;
+    }
+
+    /* 差值标签样式微调，使其在右侧水平平齐 */
+    [data-testid="stMetricDelta"] {
+        margin-top: 0px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+    }
+
     /* 优化侧边栏 Form 边框 */
     div[data-testid="stForm"] {
         border-radius: 10px;
@@ -188,7 +204,7 @@ if st.sidebar.button("🔄 重置为默认演示数据", use_container_width=Tru
     st.sidebar.info("数据已重置！")
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度筛选与对齐的 KPI 卡片
+# 5. 时间汇总粒度筛选与右侧平齐对齐的 KPI 卡片
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -247,7 +263,7 @@ for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
 
-# 顶部 KPI 概览卡片（CSS 已修复对齐）
+# 顶部 KPI 概览卡片（差值标签已移至右侧且底部完美对齐）
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 with m_col1:
     st.metric("🎯 总目标人数", f"{total_target_cum} 人")
