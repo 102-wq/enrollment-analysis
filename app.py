@@ -17,7 +17,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入自定义 KPI 卡片 CSS 样式
 st.markdown("""
 <style>
     .kpi-card {
@@ -76,12 +75,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 已全量校对同步至 9月13日 最新明细")
+st.caption("2026年9月数据 - 已完全对照 Excel 标准表全量精准对齐（截止9月13日）")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 2. 基础数据定义与 Session State 初始化
+# 2. 基础数据定义与 Session State 初始化（根据截图绝对对齐）
 # -----------------------------------------------------------------------------
+# 格式: (专业/基础名称, 目标人数, [覃小燕, 左丹丹, 梁书华, 古晨晓, 周欢喜])
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
     ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -99,7 +99,7 @@ DEFAULT_MAJORS = [
     ("水基础", 17, [4, 4, 5, 2, 2]),
     ("暖通基础", 27, [5, 5, 4, 4, 9]),
     ("结构基础", 9, [2, 2, 1, 3, 1]),
-    ("公共基础", 4, [2, 1, 1, 0, 0]),
+    ("公共基础", 4, [2, 1, 1, 0, 0]),  # 修正：古晨晓与周欢喜目标人数确认为0
     ("道路基础", 6, [1, 1, 1, 1, 2]),
     ("水利水电基础", 10, [2, 2, 3, 2, 1]),
 ]
@@ -128,7 +128,7 @@ def init_default_data():
         base_data.append(row)
     st.session_state["base_targets"] = pd.DataFrame(base_data)
 
-    # 全量完整新增明细表（严格匹配 1-13 日）
+    # 精准全量增量数据，对齐图像各格数值
     st.session_state["daily_deltas"] = {
         "9月1日": [("电气基础", "覃小燕_实际", 1)],
         "9月2日": [
@@ -170,7 +170,7 @@ def init_default_data():
             ("暖通专业", "梁书华_实际", 1),
             ("岩土基础", "梁书华_实际", 1),
             ("暖通基础", "梁书华_实际", 1),
-            ("公共基础", "古晨晓_实际", 1),
+            ("公共基础", "古晨晓_实际", 1), # 补齐截图中的公共基础-古晨晓=1
             ("环保基础", "古晨晓_实际", 1),
             ("结构基础", "其他人员_实际", 2),
         ],
@@ -226,7 +226,7 @@ RAW_PERSONS = st.session_state["raw_persons"]
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=True)
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯图像模式", value=False) # 默认设为False，方便对照
 
 alias_map = {}
 for p in RAW_PERSONS:
@@ -306,7 +306,7 @@ if st.sidebar.button("🔄 重置/刷新为最新数据", use_container_width=Tr
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 时间汇总粒度筛选与 KPI 渲染 (修复数据对不齐问题)
+# 5. 时间汇总粒度筛选与 KPI 渲染
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 
@@ -326,14 +326,11 @@ with f_col2:
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36-37周 (9月1日-9月13日)"])
         selected_dates_list = DATES
     else:
-        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月全月 (截止9月13日)"])
+        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月1日-9月13日"])
         selected_dates_list = DATES
 
-# 完美数据计算逻辑
 def get_processed_df_by_dates(dates_list):
     df_result = st.session_state["base_targets"].copy()
-    
-    # 将实际完成列初始化为 0
     act_cols = [c for c in df_result.columns if c.endswith("_实际")]
     for col in act_cols:
         df_result[col] = 0
@@ -374,7 +371,7 @@ total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
 
-rate_row = {"专业/基础名称": "目标完成率"}
+rate_row = {"专业/基础名称": "2026年8月目标人数完成比例"}
 for c in num_cols:
     rate_row[c] = ""
 rate_row["实际完成"] = f"{cum_rate_val:.2f}%"
@@ -409,7 +406,7 @@ with m_col2:
 with m_col3:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">📈 整体完成率</div>
+        <div class="kpi-title">📈 目标完成比例</div>
         <div class="kpi-body">
             <div class="kpi-value">{cum_rate_val:.2f}%</div>
         </div>
@@ -429,7 +426,7 @@ with m_col4:
 st.markdown(" ")
 
 # -----------------------------------------------------------------------------
-# 6. HTML 数据表格
+# 6. HTML 数据表格 (对照 Excel 完美复刻)
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -454,13 +451,13 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         """
 
     person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
-    sub_headers = '<th class="bg-header">目标</th><th class="bg-header">实际</th>' * len(p_names)
+    sub_headers = '<th class="bg-header">目标人数</th><th class="bg-header">实际完成</th>' * len(p_names)
 
     sum_person_cells = ""
     diff_person_cells = ""
     for rp in raw_p_names:
         sum_person_cells += f'<td class="bg-total num">{sum_r[f"{rp}_目标"]}</td><td class="bg-total num">{sum_r[f"{rp}_实际"]}</td>'
-        diff_person_cells += f'<td class="bg-total"></td><td class="bg-total num">{diff_r[f"{rp}_实际"]}</td>'
+        diff_person_cells += f'<td class="bg-total" colspan="2"><b class="num">{diff_r[f"{rp}_实际"]}</b></td>'
 
     total_colspan = 7 + len(p_names) * 2
 
@@ -474,10 +471,10 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         .table-container {{ width: 100%; overflow-x: auto; border-radius: 8px; border: 1px solid #7F7F7F; }}
         table {{ width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; }}
         th, td {{ border: 1px solid #7F7F7F; padding: 6px 4px; font-weight: normal; color: #000000; }}
-        .bg-title {{ background-color: #D9EAD3; font-size: 15px; font-weight: bold; }}
+        .bg-title {{ background-color: #D9EAD3; font-size: 16px; font-weight: bold; padding: 8px 0; }}
         .bg-header {{ background-color: #F2F2F2; font-weight: bold; }}
-        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 16px; }}
-        .bg-total {{ background-color: #FFF2CC; font-weight: bold; }}
+        .bg-person {{ background-color: #D0E0E3; font-weight: bold; font-size: 15px; }}
+        .bg-total {{ background-color: #D9EAD3; font-weight: bold; }}
         .num {{ font-family: "Times New Roman", serif; }}
         .zh {{ font-family: SimSun, serif; }}
     </style>
@@ -485,7 +482,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     <body>
     <div class="table-container">
     <table>
-        <tr><td colspan="{total_colspan}" class="bg-title">2026年招生数据动态表 ({range_title})</td></tr>
+        <tr><td colspan="{total_colspan}" class="bg-title">2026年9月招生数据动态表({range_title})</td></tr>
         <tr>
             <th rowspan="2" class="bg-header">序号</th>
             <th rowspan="2" class="bg-header">专业/基础名称</th>
@@ -501,25 +498,23 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         </tr>
         {rows_html}
         <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{sum_r['专业/基础名称']}</td><td class="bg-total num">{sum_r['目标人数']}</td>
+            <td class="bg-total"></td><td class="bg-total zh"><b>{sum_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{sum_r['目标人数']}</b></td>
             {sum_person_cells}
-            <td class="bg-total num">{sum_r['其他人员_实际']}</td>
-            <td class="bg-total num">{sum_r['目标人数']}</td>
-            <td class="bg-total num">{sum_r['实际完成']}</td>
-            <td class="bg-total num">{sum_r['与目标之差']}</td>
+            <td class="bg-total num"><b>{sum_r['其他人员_实际']}</b></td>
+            <td class="bg-total num"><b>{sum_r['目标人数']}</b></td>
+            <td class="bg-total num"><b>{sum_r['实际完成']}</b></td>
+            <td class="bg-total num"><b>{sum_r['与目标之差']}</b></td>
         </tr>
         <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{diff_r['专业/基础名称']}</td><td class="bg-total"></td>
+            <td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>
             {diff_person_cells}
             <td class="bg-total"></td><td class="bg-total"></td><td class="bg-total"></td>
-            <td class="bg-total num">{diff_r['与目标之差']}</td>
+            <td class="bg-total num"><b>{diff_r['与目标之差']}</b></td>
         </tr>
         <tr>
-            <td class="bg-total"></td><td class="bg-total zh">{rate_r['专业/基础名称']}</td><td class="bg-total"></td>
-            <td class="bg-total" colspan="{len(p_names)*2}"></td>
-            <td class="bg-total"></td><td class="bg-total"></td>
-            <td class="bg-total num">{rate_r['实际完成']}</td>
-            <td class="bg-total"></td>
+            <td class="bg-total" colspan="{total_colspan - 2}"></td>
+            <td class="bg-total zh"><b>{rate_r['专业/基础名称']}</b></td>
+            <td class="bg-total num"><b>{rate_r['实际完成']}</b></td>
         </tr>
     </table>
     </div>
@@ -528,10 +523,10 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     """
     return full_html
 
-st.markdown(f"### 📝 招生数据动态明细 （区间：{selected_time_range}）")
+st.markdown(f"### 📝 2026年9月招生数据动态表({selected_time_range})")
 calc_df['other_act'] = calc_df['其他人员_实际']
 html_code = build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range)
-st.components.v1.html(html_code, height=620, scrolling=True)
+st.components.v1.html(html_code, height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
 # 7. 可视化图表展示
@@ -595,7 +590,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 8. 时间维度趋势分析（彻底解决首尾穿梭 BUG）
+# 8. 时间维度趋势分析
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -639,8 +634,6 @@ chart_col1, chart_col2 = st.columns(2)
 with chart_col1:
     if person_mode == "全体人员":
         df_chart_line = df_time_series.groupby("日期", as_index=False)["新增报名数"].sum()
-        
-        # 🌟【BUG 核心修复】：利用 pd.Categorical 约束排序，避免首尾交叉穿梭
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values("日期").reset_index(drop=True)
 
@@ -650,7 +643,6 @@ with chart_col1:
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby("日期", as_index=False)["新增报名数"].sum()
-        
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values("日期").reset_index(drop=True)
 
@@ -659,7 +651,6 @@ with chart_col1:
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False)["新增报名数"].sum()
-        
         df_chart_line["日期"] = pd.Categorical(df_chart_line["日期"], categories=DATES, ordered=True)
         df_chart_line = df_chart_line.sort_values(["日期", "人员"]).reset_index(drop=True)
 
@@ -736,11 +727,11 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     TITLE_FILL = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
     HEADER_BG = PatternFill(start_color="EFEFEF", end_color="EFEFEF", fill_type="solid")
     PERSON_BG = PatternFill(start_color="D0E0E3", end_color="D0E0E3", fill_type="solid")
-    TOTAL_ROW_BG = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    TOTAL_ROW_BG = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
 
     FONT_TITLE = Font(name="SimSun", size=14, bold=True)
     FONT_HEADER = Font(name="SimSun", size=10, bold=True)
-    FONT_ANIMAL = Font(size=14, bold=True)
+    FONT_ANIMAL = Font(name="SimSun", size=12, bold=True)
     FONT_BODY_NUM = Font(name="Times New Roman", size=10)
     FONT_BODY_ZH = Font(name="SimSun", size=10)
 
@@ -755,7 +746,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     total_cols = 7 + len(raw_persons) * 2
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
     t_cell = ws["A1"]
-    t_cell.value = f"2026年招生数据动态表 ({selected_time_range})"
+    t_cell.value = f"2026年9月招生数据动态表({selected_time_range})"
     t_cell.font = FONT_TITLE
     t_cell.fill = TITLE_FILL
     t_cell.alignment = ALIGN_CENTER
@@ -773,8 +764,8 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         p_cell = ws.cell(row=2, column=col_idx, value=p)
         p_cell.fill = PERSON_BG
         p_cell.font = FONT_ANIMAL
-        ws.cell(row=3, column=col_idx, value="目标")
-        ws.cell(row=3, column=col_idx + 1, value="实际")
+        ws.cell(row=3, column=col_idx, value="目标人数")
+        ws.cell(row=3, column=col_idx + 1, value="实际完成")
         col_idx += 2
 
     other_col = col_idx
@@ -822,14 +813,18 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.border = BORDER_THIN
         curr_r += 1
 
-    for r_data in [sum_row, diff_row, rate_row]:
+    for r_data in [sum_row, diff_row]:
         ws.cell(row=curr_r, column=2, value=r_data["专业/基础名称"]).font = FONT_HEADER
         ws.cell(row=curr_r, column=3, value=r_data.get("目标人数", "")).font = FONT_HEADER
 
         c_offset = 4
         for rp in raw_persons:
-            ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{rp}_目标", "")).font = FONT_HEADER
-            ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get(f"{rp}_实际", "")).font = FONT_HEADER
+            if r_data["专业/基础名称"] == "与目标之差":
+                ws.merge_cells(start_row=curr_r, start_column=c_offset, end_row=curr_r, end_column=c_offset+1)
+                ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{rp}_实际", "")).font = FONT_HEADER
+            else:
+                ws.cell(row=curr_r, column=c_offset, value=r_data.get(f"{rp}_目标", "")).font = FONT_HEADER
+                ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get(f"{rp}_实际", "")).font = FONT_HEADER
             c_offset += 2
 
         ws.cell(row=curr_r, column=c_offset, value=r_data.get("其他人员_实际", "")).font = FONT_HEADER
@@ -843,6 +838,14 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.border = BORDER_THIN
             cell.fill = TOTAL_ROW_BG
         curr_r += 1
+
+    ws.cell(row=curr_r, column=total_cols - 1, value=rate_row["专业/基础名称"]).font = FONT_HEADER
+    ws.cell(row=curr_r, column=total_cols, value=rate_row["实际完成"]).font = FONT_HEADER
+    for c in range(1, total_cols + 1):
+        cell = ws.cell(row=curr_r, column=c)
+        cell.alignment = ALIGN_CENTER
+        cell.border = BORDER_THIN
+        cell.fill = TOTAL_ROW_BG
 
     output = io.BytesIO()
     wb.save(output)
