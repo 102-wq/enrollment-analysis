@@ -738,7 +738,6 @@ if time_granularity_type == "按日（单日切片）":
 chart_col1, chart_col2 = st.columns(2)
 
 with chart_col1:
-    # 判断单日切片还是区间多日
     is_single_day = (time_granularity_type == "按日（单日切片）")
     
     if person_mode == "全体人员":
