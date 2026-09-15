@@ -16,14 +16,12 @@ DB_FILE = "enrollment_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # 存储基础配置及成员信息
     c.execute('''
         CREATE TABLE IF NOT EXISTS config (
             key TEXT PRIMARY KEY,
             value TEXT
         )
     ''')
-    # 存储每日招生增量流水
     c.execute('''
         CREATE TABLE IF NOT EXISTS daily_deltas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +38,6 @@ def load_data_from_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 读取配置
     c.execute("SELECT value FROM config WHERE key = 'raw_persons'")
     row_p = c.fetchone()
     raw_persons = json.loads(row_p[0]) if row_p else None
@@ -49,7 +46,6 @@ def load_data_from_db():
     row_a = c.fetchone()
     person_animals = json.loads(row_a[0]) if row_a else None
 
-    # 读取流水记录
     c.execute("SELECT date_str, major, target_col, val FROM daily_deltas")
     rows = c.fetchall()
     
@@ -84,7 +80,7 @@ def save_all_to_db(raw_persons, person_animals, daily_deltas):
 init_db()
 
 # -----------------------------------------------------------------------------
-# 2. 页面基本配置与全局响应式 CSS 注入 (支持移动端)
+# 2. 页面基本配置与全局响应式 CSS 注入
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="招生数据动态管理与多维分析系统",
@@ -95,7 +91,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* 移动端与窄屏自适应样式 */
     @media (max-width: 768px) {
         .kpi-card {
             height: auto !important;
@@ -164,7 +159,6 @@ st.markdown("""
         white-space: nowrap;
     }
 
-    /* 滑动顺畅的表格外壳 */
     .table-container {
         width: 100%;
         overflow-x: auto;
@@ -287,7 +281,6 @@ def reset_to_default_mock():
     save_all_to_db(raw_persons, person_animals, daily_deltas)
     return raw_persons, person_animals, daily_deltas
 
-# 初始化/加载数据
 if "raw_persons" not in st.session_state:
     db_raw_persons, db_person_animals, db_daily_deltas = load_data_from_db()
     if db_raw_persons is None:
@@ -364,7 +357,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         st.sidebar.success(f"已录入：{input_date} {input_major} - {input_person_disp} +{input_val}人")
         st.rerun()
 
-# JSON 备份与恢复入口
+# JSON 备份与恢复
 st.sidebar.markdown("---")
 st.sidebar.subheader("💾 数据备份与恢复")
 
@@ -692,7 +685,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 时间维度趋势分析 (单日切片自动转柱状图)
+# 9. 时间维度趋势分析 (有序时间序列修复 + 聚合防紊乱)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -731,7 +724,10 @@ for d_idx, d in enumerate(DATES):
 
 df_time_series = pd.DataFrame(time_records)
 
-# 如果选择的是单日切片，过滤出该天的数据
+# 关键修复 1：将日期转为严格有序的 Categorical 变量并进行升序排列，解决连线交叉乱窜
+df_time_series['日期'] = pd.Categorical(df_time_series['日期'], categories=DATES, ordered=True)
+df_time_series = df_time_series.sort_values('日期')
+
 if time_granularity_type == "按日（单日切片）":
     df_time_series = df_time_series[df_time_series["日期"] == selected_time_range]
 
@@ -741,7 +737,8 @@ with chart_col1:
     is_single_day = (time_granularity_type == "按日（单日切片）")
     
     if person_mode == "全体人员":
-        df_chart_line = df_time_series.groupby("日期", as_index=False)["新增报名数"].sum()
+        # 关键修复 2：groupby 加上 sort=False 保持日期已有顺序，不自动字母排序
+        df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
         if is_single_day:
             fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全体新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"])
             fig_line.update_traces(textposition="outside")
@@ -751,7 +748,7 @@ with chart_col1:
         
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
-        df_chart_line = df_sub.groupby("日期", as_index=False)["新增报名数"].sum()
+        df_chart_line = df_sub.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
         if is_single_day:
             fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"])
             fig_line.update_traces(textposition="outside")
@@ -760,7 +757,7 @@ with chart_col1:
             fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=2, marker=dict(size=6, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
-        df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False)["新增报名数"].sum()
+        df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False, sort=False)["新增报名数"].sum()
         if is_single_day:
             fig_line = px.bar(df_chart_line, x="人员", y="新增报名数", color="人员", title=f"📊 <b>{selected_time_range} 多人招生对比</b>", text="新增报名数", color_discrete_sequence=px.colors.qualitative.Bold)
             fig_line.update_traces(textposition="outside")
@@ -772,8 +769,6 @@ with chart_col1:
             )
             fig_line.update_traces(line_width=2, marker=dict(size=6))
 
-    if not is_single_day:
-        fig_line.update_xaxes(categoryorder="array", categoryarray=DATES)
     fig_line.update_layout(
         yaxis_title="新增报名人数", xaxis_title="日期" if not is_single_day else "", hovermode="x unified",
         plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF",
