@@ -1,5 +1,6 @@
 import io
 import json
+import random
 import sqlite3
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -175,11 +176,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 默认动物头像全脱敏模式 | 本地 SQLite 自动实时存储")
+st.caption("2026年9月全月动态数据 | 默认动物头像脱敏模式 | 本地 SQLite 自动持久化")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 3. 基础数据定义与 Session State / SQLite 同步
+# 3. 基础数据定义与全月 (9月1日 - 9月30日) 补充
 # -----------------------------------------------------------------------------
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]),
@@ -203,12 +204,12 @@ DEFAULT_MAJORS = [
     ("水利水电基础", 10, [2, 2, 3, 2, 1]),
 ]
 
-DATES = [
-    "9月1日", "9月2日", "9月3日", "9月4日", "9月5日", "9月6日", "9月7日",
-    "9月8日", "9月9日", "9月10日", "9月11日", "9月12日", "9月13日"
-]
-WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一", 
-            "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+# 动态生成9月1日到9月30日全月份日期与星期
+DATES = [f"9月{i}日" for i in range(1, 31)]
+WEEKDAYS_MAP = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+# 2026年9月1日是星期二 (Index 1)
+WEEKDAYS = [WEEKDAYS_MAP[(1 + i) % 7] for i in range(30)]
+
 AVAL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥"]
 
 def build_base_targets_df(persons):
@@ -223,61 +224,30 @@ def build_base_targets_df(persons):
         base_data.append(row)
     return pd.DataFrame(base_data)
 
+# 随机全月模拟生成器
+def generate_full_month_random_data(raw_persons):
+    all_majors = [m[0] for m in DEFAULT_MAJORS]
+    cols = [f"{p}_实际" for p in raw_persons] + ["其他人员_实际"]
+    
+    simulated_deltas = {}
+    for d in DATES:
+        simulated_deltas[d] = []
+        # 每天随机生成 1 到 4 笔数据记录
+        num_records = random.randint(1, 4)
+        for _ in range(num_records):
+            m = random.choice(all_majors)
+            c = random.choice(cols)
+            # 85% 概率新增 (+1 ~ +3)，15% 概率扣减 (-1)
+            val = random.choice([1, 1, 1, 2, 2, 3, -1])
+            simulated_deltas[d].append((m, c, val))
+    return simulated_deltas
+
 def reset_to_default_mock():
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {
         "覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"
     }
-    daily_deltas = {
-        "9月1日": [("电气基础", "覃小燕_实际", 1)],
-        "9月2日": [
-            ("环保专业", "覃小燕_实际", 1), ("环保专业", "左丹丹_实际", 1),
-            ("电气基础", "覃小燕_实际", 1), ("发输电专业", "其他人员_实际", 1),
-            ("233网校", "其他人员_实际", 1),
-        ],
-        "9月3日": [
-            ("环评专业", "左丹丹_实际", 1), ("暖通专业", "周欢喜_实际", 1),
-            ("环保基础", "左丹丹_实际", 1), ("环保基础", "其他人员_实际", 1),
-        ],
-        "9月4日": [
-            ("电气基础", "覃小燕_实际", 1), ("电气基础", "左丹丹_实际", 1),
-            ("环保基础", "覃小燕_实际", 1), ("水利水电基础", "其他人员_实际", 1),
-        ],
-        "9月5日": [
-            ("给排水专业", "梁书华_实际", 1), ("暖通专业", "周欢喜_实际", 1),
-            ("岩土基础", "梁书华_实际", 1), ("暖通基础", "周欢喜_实际", 1),
-        ],
-        "9月6日": [
-            ("给排水专业", "梁书华_实际", 1), ("环保专业", "其他人员_实际", 1), ("岩土专业", "梁书华_实际", 1),
-        ],
-        "9月7日": [
-            ("电气基础", "覃小燕_实际", 3), ("环保基础", "覃小燕_实际", 1), ("水基础", "覃小燕_实际", 1),
-            ("环保基础", "左丹丹_实际", 1), ("暖通基础", "左丹丹_实际", 1), ("暖通专业", "梁书华_实际", 1),
-            ("岩土基础", "梁书华_实际", 1), ("暖通基础", "梁书华_实际", 1), ("公共基础", "古晨晓_实际", 1),
-            ("环保基础", "古晨晓_实际", 1), ("结构基础", "其他人员_实际", 2),
-        ],
-        "9月8日": [("给排水专业", "梁书华_实际", 1)],
-        "9月9日": [
-            ("暖通专业", "左丹丹_实际", 1), ("233网校", "左丹丹_实际", 1),
-            ("水基础", "周欢喜_实际", 1), ("给排水专业", "其他人员_实际", 1),
-        ],
-        "9月10日": [
-            ("电气基础", "覃小燕_实际", 2), ("环保基础", "覃小燕_实际", 1), ("暖通专业", "周欢喜_实际", 1),
-            ("电气基础", "周欢喜_实际", 1), ("暖通基础", "周欢喜_实际", 1), ("岩土基础", "古晨晓_实际", 1),
-            ("水利水电基础", "左丹丹_实际", 1), ("岩土基础", "梁书华_实际", 1),
-        ],
-        "9月11日": [
-            ("电气基础", "覃小燕_实际", 1), ("道路基础", "覃小燕_实际", 1),
-            ("岩土基础", "其他人员_实际", 1), ("电气基础", "梁书华_实际", 1),
-        ],
-        "9月12日": [("电气基础", "覃小燕_实际", 1)],
-        "9月13日": [
-            ("给排水专业", "周欢喜_实际", 1), ("结构专业", "其他人员_实际", 1), ("电气基础", "覃小燕_实际", 1),
-            ("电气基础", "左丹丹_实际", 1), ("水基础", "覃小燕_实际", 1), ("水基础", "梁书华_实际", 1),
-            ("暖通基础", "覃小燕_实际", 1), ("暖通基础", "周欢喜_实际", 1), ("水利水电基础", "梁书华_实际", 1),
-            ("水利水电基础", "其他人员_实际", 1),
-        ],
-    }
+    daily_deltas = generate_full_month_random_data(raw_persons)
     save_all_to_db(raw_persons, person_animals, daily_deltas)
     return raw_persons, person_animals, daily_deltas
 
@@ -294,7 +264,7 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 侧边栏：脱敏管理 & 人员增删 & 数据备份恢复
+# 4. 侧边栏：脱敏管理 & 人员增删 & 模拟生成
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 
@@ -330,13 +300,20 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.sidebar.success(f"已添加：{new_p_name} ({new_p_emoji})")
             st.rerun()
 
+# 🎲 快捷模拟生成 9 月全月数据按钮
+st.sidebar.markdown("---")
+if st.sidebar.button("🎲 重新随机生成9月全月模拟数据", use_container_width=True):
+    new_deltas = generate_full_month_random_data(st.session_state["raw_persons"])
+    st.session_state["daily_deltas"] = new_deltas
+    save_all_to_db(st.session_state["raw_persons"], st.session_state["person_animals"], new_deltas)
+    st.sidebar.success("已成功生成9月1日-30日全月模拟数据！")
+    st.rerun()
+
 # -----------------------------------------------------------------------------
 # 5. 快捷录入与删减招生数据
 # -----------------------------------------------------------------------------
-st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
 
-# 增加了“加数 / 减数”模式切换
 op_mode = st.sidebar.radio("操作模式：", ["➕ 新增完成人数", "➖ 删减完成人数"], horizontal=True)
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
@@ -354,7 +331,6 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         if input_date not in st.session_state["daily_deltas"]:
             st.session_state["daily_deltas"][input_date] = []
 
-        # 减扣模式下存入负值
         actual_change = int(input_val) if op_mode == "➕ 新增完成人数" else -int(input_val)
 
         st.session_state["daily_deltas"][input_date].append(
@@ -366,7 +342,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         st.sidebar.success(f"已更新：{input_date} {input_major} - {input_person_disp} ({sign_str}人)")
         st.rerun()
 
-# 补充：明细管理与单条直接撤销/删除
+# 单条明细撤销与删除
 with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
     del_date = st.selectbox("选择要查验的日期：", DATES, key="del_date_sel")
     day_records = st.session_state["daily_deltas"].get(del_date, [])
@@ -421,14 +397,6 @@ if uploaded_file is not None:
     except Exception as e:
         st.sidebar.error("备份文件格式不正确")
 
-if st.sidebar.button("🔄 重置全表为初始状态", use_container_width=True):
-    r_p, p_a, d_d = reset_to_default_mock()
-    st.session_state["raw_persons"] = r_p
-    st.session_state["person_animals"] = p_a
-    st.session_state["daily_deltas"] = d_d
-    st.sidebar.info("数据已成功重置！")
-    st.rerun()
-
 # -----------------------------------------------------------------------------
 # 6. 时间汇总粒度筛选与 KPI 渲染
 # -----------------------------------------------------------------------------
@@ -447,10 +415,18 @@ with f_col2:
         selected_time_range = st.selectbox("选择具体日期：", DATES, index=len(DATES)-1)
         selected_dates_list = [selected_time_range]
     elif time_granularity_type == "按周（周度汇总）":
-        selected_time_range = st.selectbox("选择具体周：", ["2026年第36-37周 (9月1日-9月13日)"])
-        selected_dates_list = DATES
+        week_options = {
+            "第1周 (9月1日-9月6日)": DATES[0:6],
+            "第2周 (9月7日-9月13日)": DATES[6:13],
+            "第3周 (9月14日-9月20日)": DATES[13:20],
+            "第4周 (9月21日-9月27日)": DATES[20:27],
+            "第5周 (9月28日-9月30日)": DATES[27:30],
+        }
+        selected_week_label = st.selectbox("选择具体周：", list(week_options.keys()))
+        selected_time_range = selected_week_label
+        selected_dates_list = week_options[selected_week_label]
     else:
-        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月1日-9月13日"])
+        selected_time_range = "2026年9月1日-9月30日"
         selected_dates_list = DATES
 
 def get_processed_df_by_dates(dates_list):
@@ -474,7 +450,6 @@ def get_processed_df_by_dates(dates_list):
 calc_df = get_processed_df_by_dates(selected_dates_list)
 
 act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
-# 完成人数取 0 以上的常规展示，支持做减法
 calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
 calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
@@ -517,12 +492,13 @@ with m_col1:
 
 with m_col2:
     diff_val = sum_row['与目标之差']
+    diff_symbol = "↑" if diff_val >= 0 else "↓"
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-title">✅ 实际完成人数</div>
         <div class="kpi-body">
             <div class="kpi-value">{total_actual_cum} 人</div>
-            <div class="kpi-delta">↓ {diff_val} 人</div>
+            <div class="kpi-delta">{diff_symbol} {diff_val} 人</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -540,7 +516,7 @@ with m_col3:
 with m_col4:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">📅 选定区间日均新增</div>
+        <div class="kpi-title">📅 选定区间日均变动</div>
         <div class="kpi-body">
             <div class="kpi-value">{avg_per_day:.1f} 人/天</div>
         </div>
@@ -718,7 +694,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 时间维度趋势分析
+# 9. 时间维度趋势分析 (支持全月 1-30 日显示)
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -760,8 +736,8 @@ df_time_series = pd.DataFrame(time_records)
 df_time_series['日期'] = pd.Categorical(df_time_series['日期'], categories=DATES, ordered=True)
 df_time_series = df_time_series.sort_values('日期')
 
-if time_granularity_type == "按日（单日切片）":
-    df_time_series = df_time_series[df_time_series["日期"] == selected_time_range]
+if time_granularity_type != "按月（月度全量）":
+    df_time_series = df_time_series[df_time_series["日期"].isin(selected_dates_list)]
 
 chart_col1, chart_col2 = st.columns(2)
 
@@ -774,7 +750,7 @@ with chart_col1:
             fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全体新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"])
             fig_line.update_traces(textposition="outside")
         else:
-            fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全体人员招生趋势 (按日明细)</b>", text="新增报名数")
+            fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全体人员招生趋势 (9月全月按日)</b>", text="新增报名数")
             fig_line.update_traces(textposition="top center", line_color="#D50000", line_width=2, marker=dict(size=6, color="#D50000"))
         
     elif person_mode == "单人独立分析":
@@ -784,7 +760,7 @@ with chart_col1:
             fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"])
             fig_line.update_traces(textposition="outside")
         else:
-            fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 (按日明细)</b>", text="新增报名数")
+            fig_line = px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】9月趋势 (按日)</b>", text="新增报名数")
             fig_line.update_traces(textposition="top center", line_color="#2962FF", line_width=2, marker=dict(size=6, color="#2962FF"))
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
@@ -795,7 +771,7 @@ with chart_col1:
         else:
             fig_line = px.line(
                 df_chart_line, x="日期", y="新增报名数", color="人员", markers=True, 
-                title="📈 <b>多人招生趋势对比 (按日明细)</b>",
+                title="📈 <b>多人招生趋势对比 (9月全月)</b>",
                 color_discrete_sequence=px.colors.qualitative.Bold
             )
             fig_line.update_traces(line_width=2, marker=dict(size=6))
@@ -811,7 +787,6 @@ with chart_col1:
 with chart_col2:
     if person_mode == "全体人员":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
-        # 占比饼图仅显示非负的人数项
         df_pie = df_pie[df_pie["新增报名数"] > 0]
         fig_pie = px.pie(
             df_pie, values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献占比</b>", 
