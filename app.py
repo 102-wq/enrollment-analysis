@@ -331,18 +331,21 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷录入招生
+# 5. 快捷录入与删减招生数据
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.subheader("➕ 快捷录入招生")
+st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
+
+# 增加了“加数 / 减数”模式切换
+op_mode = st.sidebar.radio("操作模式：", ["➕ 新增完成人数", "➖ 删减完成人数"], horizontal=True)
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_date = st.selectbox("日期", DATES)
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
-    input_val = st.number_input("新增人数", min_value=1, value=1, step=1)
+    input_val = st.number_input("变动人数", min_value=1, value=1, step=1)
 
-    submit_btn = st.form_submit_button("确认录入", use_container_width=True)
+    submit_btn = st.form_submit_button("确认提交修改", use_container_width=True)
     if submit_btn:
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
@@ -350,12 +353,41 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
         if input_date not in st.session_state["daily_deltas"]:
             st.session_state["daily_deltas"][input_date] = []
+
+        # 减扣模式下存入负值
+        actual_change = int(input_val) if op_mode == "➕ 新增完成人数" else -int(input_val)
+
         st.session_state["daily_deltas"][input_date].append(
-            (input_major, target_col, int(input_val))
+            (input_major, target_col, actual_change)
         )
         save_all_to_db(st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"])
-        st.sidebar.success(f"已录入：{input_date} {input_major} - {input_person_disp} +{input_val}人")
+        
+        sign_str = f"+{input_val}" if actual_change > 0 else f"-{input_val}"
+        st.sidebar.success(f"已更新：{input_date} {input_major} - {input_person_disp} ({sign_str}人)")
         st.rerun()
+
+# 补充：明细管理与单条直接撤销/删除
+with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
+    del_date = st.selectbox("选择要查验的日期：", DATES, key="del_date_sel")
+    day_records = st.session_state["daily_deltas"].get(del_date, [])
+    if not day_records:
+        st.info("该日期暂无记录")
+    else:
+        for r_idx, item in enumerate(day_records):
+            if len(item) == 3:
+                m_name, p_col, val_num = item
+            elif len(item) == 2:
+                m_name = "电气基础"
+                p_col, val_num = item
+            p_raw = p_col.replace("_实际", "")
+            p_show = alias_map.get(p_raw, p_raw)
+            
+            c_lbl, c_btn = st.columns([3, 1])
+            c_lbl.caption(f"{m_name} | {p_show} | {'+' if val_num>0 else ''}{val_num}人")
+            if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
+                st.session_state["daily_deltas"][del_date].pop(r_idx)
+                save_all_to_db(st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"])
+                st.rerun()
 
 # JSON 备份与恢复
 st.sidebar.markdown("---")
@@ -442,6 +474,7 @@ def get_processed_df_by_dates(dates_list):
 calc_df = get_processed_df_by_dates(selected_dates_list)
 
 act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
+# 完成人数取 0 以上的常规展示，支持做减法
 calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
 calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
@@ -526,7 +559,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         for rp in raw_p_names:
             tgt_val = row[f"{rp}_目标"]
             act_val = row[f"{rp}_实际"]
-            person_cells += f'<td class="num">{tgt_val}</td><td class="num">{act_val if act_val > 0 else ""}</td>'
+            person_cells += f'<td class="num">{tgt_val}</td><td class="num">{act_val if act_val != 0 else ""}</td>'
 
         rows_html += f"""
         <tr>
@@ -534,7 +567,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
             <td class="zh">{row['专业/基础名称']}</td>
             <td class="num">{row['目标人数']}</td>
             {person_cells}
-            <td class="num">{row['other_act'] if row['other_act'] > 0 else ''}</td>
+            <td class="num">{row['other_act'] if row['other_act'] != 0 else ''}</td>
             <td class="num">{row['目标人数']}</td>
             <td class="num">{row['实际完成']}</td>
             <td class="num">{row['与目标之差']}</td>
@@ -685,7 +718,7 @@ with c2:
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 时间维度趋势分析 (有序时间序列修复 + 聚合防紊乱)
+# 9. 时间维度趋势分析
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 🔄 动态趋势与人员贡献构成分析")
@@ -724,7 +757,6 @@ for d_idx, d in enumerate(DATES):
 
 df_time_series = pd.DataFrame(time_records)
 
-# 关键修复 1：将日期转为严格有序的 Categorical 变量并进行升序排列，解决连线交叉乱窜
 df_time_series['日期'] = pd.Categorical(df_time_series['日期'], categories=DATES, ordered=True)
 df_time_series = df_time_series.sort_values('日期')
 
@@ -737,7 +769,6 @@ with chart_col1:
     is_single_day = (time_granularity_type == "按日（单日切片）")
     
     if person_mode == "全体人员":
-        # 关键修复 2：groupby 加上 sort=False 保持日期已有顺序，不自动字母排序
         df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
         if is_single_day:
             fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全体新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"])
@@ -780,6 +811,8 @@ with chart_col1:
 with chart_col2:
     if person_mode == "全体人员":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
+        # 占比饼图仅显示非负的人数项
+        df_pie = df_pie[df_pie["新增报名数"] > 0]
         fig_pie = px.pie(
             df_pie, values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献占比</b>", 
             hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
@@ -802,6 +835,7 @@ with chart_col2:
         df_major_pie = pd.DataFrame(major_records)
         if not df_major_pie.empty:
             df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
+            df_major_pie = df_major_pie[df_major_pie["新增人数"] > 0]
             fig_pie = px.pie(
                 df_major_pie, values="新增人数", names="专业/基础", 
                 title=f"🍩 <b>【{selected_person_disp}】专业成交构成</b>", 
@@ -813,6 +847,7 @@ with chart_col2:
             fig_pie.update_layout(title=f"【{selected_person_disp}】暂无增量数据")
     else:
         df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
+        df_pie = df_pie[df_pie["新增报名数"] > 0]
         fig_pie = px.pie(
             df_pie, values="新增报名数", names="人员", title=f"🍩 <b>对比成员占比构成</b>", 
             hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold
@@ -823,7 +858,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 10. Excel 导出 (包含动物符号及格式化渲染)
+# 10. Excel 导出
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -906,10 +941,10 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         c_offset = 4
         for rp in raw_persons:
             ws.cell(row=curr_r, column=c_offset, value=row[f"{rp}_目标"]).font = FONT_BODY_NUM
-            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{rp}_实际"] if row[f"{rp}_实际"] > 0 else "").font = FONT_BODY_NUM
+            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{rp}_实际"] if row[f"{rp}_实际"] != 0 else "").font = FONT_BODY_NUM
             c_offset += 2
 
-        ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_实际", 0) if row.get("其他人员_实际", 0) > 0 else "").font = FONT_BODY_NUM
+        ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_实际", 0) if row.get("其他人员_实际", 0) != 0 else "").font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 1, value=row["目标人数"]).font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 2, value=row["实际完成"]).font = FONT_BODY_NUM
         ws.cell(row=curr_r, column=c_offset + 3, value=row["与目标之差"]).font = FONT_BODY_NUM
