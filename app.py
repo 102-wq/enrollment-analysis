@@ -429,7 +429,7 @@ is_single_day = (time_granularity_type == "按日（單日切片）")
 
 with chart_col1:
     if person_mode == "全體人員":
-        df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增報名数"].sum() if not is_single_day else df_time_series.groupby("日期", as_index=False, sort=False)["新增報名數"].sum()
+        df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增報名數"].sum()
         fig_line = px.bar(df_chart_line, x="日期", y="新增報名數", title=f"📊 <b>{selected_time_range} 全體新增總量</b>", text="新增報名數", color_discrete_sequence=["#D50000"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增報名數", markers=True, title="📈 <b>全體人員招生趨勢 (按日明細)</b>", text="新增報名數")
     elif person_mode == "單人獨立分析":
         df_sub = df_time_series[df_time_series["人員"] == selected_person_disp]
