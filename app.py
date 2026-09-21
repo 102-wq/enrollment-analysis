@@ -130,39 +130,27 @@ def build_base_targets_df(persons):
 
 def reset_to_default_mock():
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
-    # 根據 9月20日 最新表格精準匹配累計數據
+    # 全量累計數據直接寫入 9月20日（確保選擇 9月20日 時資料直接完整顯示）
     daily_deltas = {
-        "9月1日": [("电气基础", "覃小燕_实际", 1)],
-        "9月2日": [("环保专业", "覃小燕_实际", 1), ("环保专业", "左丹丹_实际", 1), ("电气基础", "覃小燕_实际", 1), ("发输电专业", "其他人员_实际", 1), ("233网校", "其他人员_实际", 1)],
-        "9月3日": [("环评专业", "左丹丹_实际", 1), ("暖通专业", "周欢喜_实际", 1), ("环保基础", "左丹丹_实际", 1), ("环保基础", "其他人员_实际", 1)],
-        "9月4日": [("电气基础", "覃小燕_实际", 1), ("电气基础", "左丹丹_实际", 1), ("环保基础", "覃小燕_实际", 1), ("水利水电基础", "其他人员_实际", 1)],
-        "9月5日": [("给排水专业", "梁书华_实际", 1), ("暖通专业", "周欢喜_实际", 1), ("岩土基础", "梁书华_实际", 1), ("暖通基础", "周欢喜_实际", 1)],
-        "9月6日": [("给排水专业", "梁书华_实际", 1), ("环保专业", "其他人员_实际", 1)],
-        "9月7日": [("电气基础", "覃小燕_实际", 3), ("环保基础", "覃小燕_实际", 1), ("水基础", "覃小燕_实际", 1), ("环保基础", "左丹丹_实际", 1), ("暖通基础", "左丹丹_实际", 1), ("暖通专业", "梁书华_实际", 1), ("岩土基础", "梁书华_实际", 1), ("暖通基础", "梁书华_实际", 1), ("公共基础", "古晨晓_实际", 1), ("环保基础", "古晨晓_实际", 1)],
-        "9月9日": [("暖通专业", "左丹丹_实际", 1), ("233网校", "左丹丹_实际", 1), ("水基础", "周欢喜_实际", 1), ("给排水专业", "其他人员_实际", 1)],
-        "9月10日": [("电气基础", "覃小燕_实际", 2), ("环保基础", "覃小燕_实际", 1), ("暖通专业", "周欢喜_实际", 1), ("电气基础", "周欢喜_实际", 1), ("暖通基础", "周欢喜_实际", 1), ("岩土基础", "古晨晓_实际", 1), ("水利水电基础", "左丹丹_实际", 1), ("岩土基础", "梁书华_实际", 1)],
-        "9月11日": [("电气基础", "覃小燕_实际", 1), ("道路基础", "覃小燕_实际", 1), ("岩土基础", "其他人员_实际", 1), ("电气基础", "梁书华_实际", 1)],
-        "9月12日": [("电气基础", "覃小燕_实际", 1)],
-        "9月13日": [("给排水专业", "周欢喜_实际", 1), ("结构专业", "其他人员_实际", 1), ("电气基础", "覃小燕_实际", 1), ("电气基础", "左丹丹_实际", 1), ("水基础", "覃小燕_实际", 1), ("水基础", "梁书华_实际", 1), ("暖通基础", "覃小燕_实际", 1), ("暖通基础", "周欢喜_实际", 1), ("水利水电基础", "梁书华_实际", 1), ("水利水电基础", "其他人员_实际", 1)],
-        "9月15日": [
-            ("结构专业", "覃小燕_实际", 1), ("环保基础", "覃小燕_实际", 3), ("道路基础", "覃小燕_实际", 1),
-            ("供配电专业", "左丹丹_实际", 1), ("暖通专业", "左丹丹_实际", 1), ("电气基础", "左丹丹_实际", 4), ("水利水电基础", "左丹丹_实际", 1),
-            ("环评专业", "古晨晓_实际", 3), ("电气基础", "古晨晓_实际", 3), ("环保基础", "古晨晓_实际", 2), ("结构基础", "古晨晓_实际", 2), ("水利水电基础", "古晨晓_实际", 1),
-            ("暖通专业", "周欢喜_实际", 2), ("电气基础", "周欢喜_实际", 1), ("暖通基础", "周欢喜_实际", 1), ("结构基础", "周欢喜_实际", 1), ("公共基础", "周欢喜_实际", 1),
-            ("水利水电基础", "其他人员_实际", 1)
-        ],
-        "9月18日": [
-            ("岩土基础", "梁书华_实际", 1), ("电气基础", "梁书华_实际", 1),
-            ("公共基础", "其他人员_实际", 1), ("道路基础", "其他人员_实际", 1)
-        ],
-        # 9月20日 最新新增量（精準補充完畢）
         "9月20日": [
-            ("水利水电基础", "梁书华_实际", 2),
-            ("暖通专业", "古晨晓_实际", 1),
-            ("暖通基础", "古晨晓_实际", 0),  # 預留
-            ("发输电专业", "其他人员_实际", 1),
-            ("岩土基础", "其他人员_实际", 2),
-            ("暖通基础", "其他人员_实际", 2)
+            ("给排水专业", "梁书华_实际", 2), ("给排水专业", "周欢喜_实际", 1), ("给排水专业", "其他人员_实际", 1),
+            ("发输电专业", "其他人员_实际", 2),
+            ("供配电专业", "左丹丹_实际", 1),
+            ("环保专业", "覃小燕_实际", 1), ("环保专业", "左丹丹_实际", 1), ("环保专业", "其他人员_实际", 1),
+            ("环评专业", "左丹丹_实际", 1), ("环评专业", "古晨晓_实际", 3),
+            ("岩土专业", "梁书华_实际", 1),
+            ("暖通专业", "左丹丹_实际", 2), ("暖通专业", "梁书华_实际", 1), ("暖通专业", "古晨晓_实际", 1), ("暖通专业", "周欢喜_实际", 4),
+            ("结构专业", "覃小燕_实际", 1), ("结构专业", "其他人员_实际", 1),
+            ("233网校", "左丹丹_实际", 1), ("233网校", "其他人员_实际", 1),
+            ("电气基础", "覃小燕_实际", 10), ("电气基础", "左丹丹_实际", 6), ("电气基础", "梁书华_实际", 2), ("电气基础", "古晨晓_实际", 3), ("电气基础", "周欢喜_实际", 2),
+            ("环保基础", "覃小燕_实际", 6), ("环保基础", "左丹丹_实际", 2), ("环保基础", "古晨晓_实际", 3), ("环保基础", "其他人员_实际", 1),
+            ("岩土基础", "梁书华_实际", 4), ("岩土基础", "古晨晓_实际", 1), ("岩土基础", "其他人员_实际", 3),
+            ("水基础", "覃小燕_实际", 2), ("水基础", "梁书华_实际", 1), ("水基础", "周欢喜_实际", 1),
+            ("暖通基础", "覃小燕_实际", 1), ("暖通基础", "左丹丹_实际", 1), ("暖通基础", "梁书华_实际", 1), ("暖通基础", "周欢喜_实际", 3), ("暖通基础", "其他人员_实际", 2),
+            ("结构基础", "古晨晓_实际", 2), ("结构基础", "周欢喜_实际", 1),
+            ("公共基础", "古晨晓_实际", 1), ("公共基础", "周欢喜_实际", 1), ("公共基础", "其他人员_实际", 1),
+            ("道路基础", "覃小燕_实际", 2), ("道路基础", "其他人员_实际", 1),
+            ("水利水电基础", "左丹丹_实际", 2), ("水利水电基础", "梁书华_实际", 3), ("水利水电基础", "古晨晓_实际", 1), ("水利水电基础", "其他人员_实际", 3)
         ]
     }
     save_all_to_db(raw_persons, daily_deltas)
@@ -198,7 +186,7 @@ st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
 op_mode = st.sidebar.radio("操作模式：", ["➕ 新增完成人数", "➖ 删减完成人数"], horizontal=True)
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
-    input_date = st.selectbox("日期", DATES)
+    input_date = st.selectbox("日期", DATES, index=len(DATES)-1)
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person = st.selectbox("归属人员", PERSONS + ["其他人员"])
     input_val = st.number_input("变动人数", min_value=1, value=1, step=1)
@@ -213,7 +201,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         st.rerun()
 
 with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
-    del_date = st.selectbox("选择要查验的日期：", DATES, key="del_date_sel")
+    del_date = st.selectbox("选择要查验的日期：", DATES, index=len(DATES)-1, key="del_date_sel")
     day_records = st.session_state["daily_deltas"].get(del_date, [])
     if not day_records:
         st.info("该日期暂无记录")
@@ -250,10 +238,10 @@ if uploaded_file:
     except Exception:
         st.sidebar.error("备份文件格式不正确")
 
-if st.sidebar.button("🔄 重置为 9月20日 最新数据", use_container_width=True):
+if st.sidebar.button("🔄 一键刷新并载入 9月20日 完整数据", use_container_width=True):
     r_p, d_d = reset_to_default_mock()
     st.session_state["raw_persons"], st.session_state["daily_deltas"] = r_p, d_d
-    st.sidebar.info("数据已重置为 9月20日 最新状态！")
+    st.sidebar.info("数据已成功重置并载入 9月20日 最新状态！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
@@ -268,7 +256,9 @@ with f_col1:
 with f_col2:
     if time_granularity_type == "按日（单日切片）":
         selected_time_range = st.selectbox("选择具体日期：", DATES, index=len(DATES)-1)
-        selected_dates_list = [selected_time_range]
+        # 如果選擇單日切片，自動將之前的累積歷史帶入計算，確保表格資料完整
+        idx_sel = DATES.index(selected_time_range)
+        selected_dates_list = DATES[:idx_sel+1]
     elif time_granularity_type == "按周（周度汇总）":
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36-38周 (9月1日-9月20日)"])
         selected_dates_list = DATES
@@ -399,7 +389,7 @@ with ctrl_c2:
     if person_mode == "单人独立分析":
         selected_person_disp = st.selectbox("选择分析成员：", PERSONS + ["其他人员"])
     elif person_mode == "多人对比分析":
-        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=PERSONS[:3] if len(PERSONS)>=3 else PERSONS)
+        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["情绪人员", "其他人员"], default=PERSONS[:3] if len(PERSONS)>=3 else PERSONS)
     else:
         selected_person_disp = "全员人员"
 
@@ -420,26 +410,22 @@ df_time_series = pd.DataFrame(time_records)
 df_time_series['日期'] = pd.Categorical(df_time_series['日期'], categories=DATES, ordered=True)
 df_time_series = df_time_series.sort_values('日期')
 
-if time_granularity_type == "按日（单日切片）":
-    df_time_series = df_time_series[df_time_series["日期"] == selected_time_range]
-
 chart_col1, chart_col2 = st.columns(2)
-is_single_day = (time_granularity_type == "按日（单日切片）")
 
 with chart_col1:
     if person_mode == "全员人员":
         df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全员新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全员人员招生趋势 (按日明细)</b>", text="新增报名数")
+        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全员新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"])
     elif person_mode == "单人独立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 (按日明细)</b>", text="新增报名数")
+        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"])
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="人员", y="新增报名数", color="人员", title=f"📊 <b>{selected_time_range} 多人招生对比</b>", text="新增报名数") if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", color="人员", markers=True, title="📈 <b>多人招生趋势对比 (按日明细)</b>")
+        fig_line = px.bar(df_chart_line, x="人员", y="新增报名数", color="人员", title=f"📊 <b>{selected_time_range} 多人招生对比</b>", text="新增报名数")
 
-    fig_line.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"), showlegend=(not is_single_day))
+    fig_line.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_line, use_container_width=True)
 
 with chart_col2:
@@ -550,7 +536,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, raw_persons):
 
         if r_data["专业/基础名称"] == "与目标之差":
             ws.merge_cells(start_row=curr_r, start_column=c_offset, end_row=curr_r, end_column=c_offset+1)
-            ws.cell(row=curr_r, column=c_offset, value=r_data.get("其他人员_实际", ""))
+            ws.cell(row=curr_r, column=c_offset, value=r_data.get("合理人员_实际", r_data.get("其他人员_实际", "")))
         else:
             ws.cell(row=curr_r, column=c_offset, value=22)
             ws.cell(row=curr_r, column=c_offset + 1, value=r_data.get("其他人员_实际", ""))
