@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # -----------------------------------------------------------------------------
-# 1. 資料庫初始化與持久化操作
+# 1. 数据库初始化与持久化操作
 # -----------------------------------------------------------------------------
 DB_FILE = "enrollment_data.db"
 
@@ -64,16 +64,16 @@ def save_all_to_db(raw_persons, person_animals, daily_deltas):
         c.execute("DELETE FROM daily_deltas")
         for d, items in daily_deltas.items():
             for item in items:
-                m, col, v = item if len(item) == 3 else ("電氣基礎", item[0], item[1])
+                m, col, v = item if len(item) == 3 else ("电气基础", item[0], item[1])
                 c.execute("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (?, ?, ?, ?)", (d, m, col, v))
         conn.commit()
 
 init_db()
 
 # -----------------------------------------------------------------------------
-# 2. 頁面基本配置與 CSS 注入
+# 2. 页面基本配置与 CSS 注入
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="招生數據動態管理與多維分析系統", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="招生数据动态管理与多维分析系统", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -96,24 +96,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 招生數據動態管理與多維分析系統")
-st.caption("2026年9月數據 - 預設動物頭像全脫敏模式 | 本地 SQLite 自動實時儲存")
+st.title("📊 招生数据动态管理与多维分析系统")
+st.caption("2026年9月数据 - 默认动物头像全脱敏模式 | 本地 SQLite 自动实时存储")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 3. 基礎數據定義（只填入 9月1日 數據，清空其餘日期）
+# 3. 基础数据定义（仅填入 9月1日 真实数据，清空其他日期）
 # -----------------------------------------------------------------------------
 DEFAULT_MAJORS = [
-    ("給排水專業", 19, [4, 3, 6, 3, 3]), ("發輸電專業", 10, [2, 3, 2, 1, 2]),
-    ("供配電專業", 11, [3, 4, 2, 1, 1]), ("環保專業", 13, [4, 2, 2, 3, 2]),
-    ("環評專業", 9, [2, 2, 1, 3, 1]), ("岩土專業", 8, [2, 2, 2, 1, 1]),
-    ("暖通專業", 16, [3, 3, 3, 2, 5]), ("結構專業", 20, [4, 4, 4, 5, 3]),
-    ("道路專業", 5, [1, 1, 1, 1, 1]), ("233網校", 5, [1, 1, 1, 1, 1]),
-    ("電氣基礎", 53, [11, 16, 11, 8, 7]), ("環保基礎", 30, [9, 6, 6, 5, 4]),
-    ("岩土基礎", 36, [9, 8, 7, 6, 6]), ("水基礎", 17, [4, 4, 5, 2, 2]),
-    ("暖通基礎", 27, [5, 5, 4, 4, 9]), ("結構基礎", 9, [2, 2, 1, 2, 1]),
-    ("公共基礎", 4, [2, 1, 1, 0, 1]), ("道路基礎", 6, [1, 1, 1, 1, 2]),
-    ("水利水電基礎", 10, [2, 2, 3, 2, 1]),
+    ("给排水专业", 19, [4, 3, 6, 3, 3]), ("发输电专业", 10, [2, 3, 2, 1, 2]),
+    ("供配电专业", 11, [3, 4, 2, 1, 1]), ("环保专业", 13, [4, 2, 2, 3, 2]),
+    ("环评专业", 9, [2, 2, 1, 3, 1]), ("岩土专业", 8, [2, 2, 2, 1, 1]),
+    ("暖通专业", 16, [3, 3, 3, 2, 5]), ("结构专业", 20, [4, 4, 4, 5, 3]),
+    ("道路专业", 5, [1, 1, 1, 1, 1]), ("233网校", 5, [1, 1, 1, 1, 1]),
+    ("电气基础", 53, [11, 16, 11, 8, 7]), ("环保基础", 30, [9, 6, 6, 5, 4]),
+    ("岩土基础", 36, [9, 8, 7, 6, 6]), ("水基础", 17, [4, 4, 5, 2, 2]),
+    ("暖通基础", 27, [5, 5, 4, 4, 9]), ("结构基础", 9, [2, 2, 1, 2, 1]),
+    ("公共基础", 4, [2, 1, 1, 0, 1]), ("道路基础", 6, [1, 1, 1, 1, 2]),
+    ("水利水电基础", 10, [2, 2, 3, 2, 1]),
 ]
 
 DATES = [f"9月{i}日" for i in range(1, 31)]
@@ -121,30 +121,30 @@ DATES = [f"9月{i}日" for i in range(1, 31)]
 def build_base_targets_df(persons):
     base_data = []
     for idx, (name, total_target, person_tgts) in enumerate(DEFAULT_MAJORS, 1):
-        row = {"序號": idx, "專業/基礎名稱": name, "目標人數": total_target}
+        row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
         for p_idx, p in enumerate(persons):
-            row[f"{p}_目標"] = person_tgts[p_idx] if p_idx < len(person_tgts) else 0
-            row[f"{p}_實際"] = 0
-        row["其他人員_目標"] = 0
-        row["其他人員_實際"] = 0
+            row[f"{p}_目标"] = person_tgts[p_idx] if p_idx < len(person_tgts) else 0
+            row[f"{p}_实际"] = 0
+        row["其他人员_目标"] = 0
+        row["其他人员_实际"] = 0
         base_data.append(row)
     return pd.DataFrame(base_data)
 
 def reset_to_sep1_only():
-    raw_persons = ["覃小燕", "左丹丹", "梁書華", "古晨曉", "周歡喜"]
-    person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁書華": "🦁", "古晨曉": "🐰", "周歡喜": "🐯"}
+    raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
+    person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
     
-    # 清空所有舊數據，僅保留 9月1日 的 9 筆真實流水
+    # 清空所有旧数据，仅保留 9月1日 的 9 笔真实成交流水
     daily_deltas = {
         "9月1日": [
-            ("環保專業", "覃小燕_實際", 1),
-            ("電氣基礎", "覃小燕_實際", 1),
-            ("環保專業", "左丹丹_實際", 1),
-            ("環保基礎", "左丹丹_實際", 2),
-            ("岩土基礎", "梁書華_實際", 1),
-            ("暖通基礎", "周歡喜_實際", 1),
-            ("233網校", "其他人員_實際", 1),
-            ("電氣基礎", "其他人員_實際", 1)
+            ("环保专业", "覃小燕_实际", 1),
+            ("电气基础", "覃小燕_实际", 1),
+            ("环保专业", "左丹丹_实际", 1),
+            ("环保基础", "左丹丹_实际", 2),
+            ("岩土基础", "梁书华_实际", 1),
+            ("暖通基础", "周欢喜_实际", 1),
+            ("233网校", "其他人员_实际", 1),
+            ("电气基础", "其他人员_实际", 1)
         ]
     }
     save_all_to_db(raw_persons, person_animals, daily_deltas)
@@ -159,91 +159,95 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 側邊欄控制
+# 4. 侧边栏控制
 # -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ 資料管理與設定")
-enable_anonymize = st.sidebar.checkbox("開啟數據脫敏 / 純動物符號模式", value=True)
+st.sidebar.title("🛠️ 数据管理与设置")
+enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
 
 alias_map = {p: (st.session_state["person_animals"].get(p, "🐱") if enable_anonymize else p) for p in RAW_PERSONS}
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
+if enable_anonymize:
+    with st.sidebar.expander("👁️ 视角对照表（管理者隐私预览）", expanded=False):
+        st.dataframe(pd.DataFrame({"真实姓名": RAW_PERSONS, "代称动物": PERSONS}), hide_index=True, use_container_width=True)
+
 st.sidebar.markdown("---")
-st.sidebar.subheader("💾 資料重置")
-if st.sidebar.button("💥 重置（僅保留9月1日數據）", use_container_width=True):
+st.sidebar.subheader("💾 数据重置")
+if st.sidebar.button("💥 重置（仅保留9月1日数据）", use_container_width=True):
     r_p, p_a, d_d = reset_to_sep1_only()
     st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"] = r_p, p_a, d_d
-    st.sidebar.success("已清空舊數據，僅保留 9月1日 數據！")
+    st.sidebar.success("已清空旧数据，仅保留 9月1日 数据！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 時間彙總與 KPI 展示
+# 5. 时间汇总与 KPI 展示
 # -----------------------------------------------------------------------------
-st.subheader("🗓️ 時間彙總粒度篩選")
+st.subheader("🗓️ 时间汇总粒度筛选")
 f_col1, f_col2 = st.columns(2)
 
 with f_col1:
-    time_granularity_type = st.selectbox("選擇時間彙總粒度：", ["按月（月度全量）", "按日（單日切片）"])
+    time_granularity_type = st.selectbox("选择时间汇总粒度：", ["按月（月度全量）", "按日（单日切片）"])
 
 with f_col2:
-    if time_granularity_type == "按日（單日切片）":
-        selected_time_range = st.selectbox("選擇具體日期：", DATES, index=0)
+    if time_granularity_type == "按日（单日切片）":
+        selected_time_range = st.selectbox("选择具体日期：", DATES, index=0)
         selected_dates_list = [selected_time_range]
     else:
-        selected_time_range = st.selectbox("選擇具體月份：", ["2026年9月"])
+        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月"])
         selected_dates_list = DATES
 
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
-    act_cols = [c for c in df_result.columns if c.endswith("_實際")]
+    act_cols = [c for c in df_result.columns if c.endswith("_实际")]
     for col in act_cols: df_result[col] = 0
 
     for d in dates_list:
         for item in st.session_state["daily_deltas"].get(d, []):
-            major, col, val = item if len(item) == 3 else ("電氣基礎", item[0], item[1])
+            major, col, val = item if len(item) == 3 else ("电气基础", item[0], item[1])
             if col in df_result.columns:
-                df_result.loc[df_result["專業/基礎名稱"] == major, col] += val
+                df_result.loc[df_result["专业/基础名称"] == major, col] += val
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
-act_cols = [c for c in calc_df.columns if c.endswith("_實際")]
-calc_df["實際完成"] = calc_df[act_cols].sum(axis=1)
-calc_df["與目標之差"] = calc_df["實際完成"] - calc_df["目標人數"]
+act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
+calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
+calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
-num_cols = [c for c in calc_df.columns if c not in ["序號", "專業/基礎名稱"]]
-sum_row = {"專業/基礎名稱": "合計"}
+num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
+sum_row = {"专业/基础名称": "合计"}
 for c in num_cols: sum_row[c] = int(calc_df[c].sum())
 
-total_target_cum = sum_row["目標人數"]
-total_actual_cum = sum_row["實際完成"]
+total_target_cum = sum_row["目标人数"]
+total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
 
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 總目標人數</div><div class="kpi-body"><div class="kpi-value">{total_target_cum} 人</div></div></div>', unsafe_allow_html=True)
-m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 實際完成人數</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div><div class="kpi-delta">↓ {sum_row["與目標之差"]} 人</div></div></div>', unsafe_allow_html=True)
-m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目標完成比例</div><div class="kpi-body"><div class="kpi-value">{cum_rate_val:.2f}%</div></div></div>', unsafe_allow_html=True)
-m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 當前切片完成人數</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div></div></div>', unsafe_allow_html=True)
+m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 总目标人数</div><div class="kpi-body"><div class="kpi-value">{total_target_cum} 人</div></div></div>', unsafe_allow_html=True)
+m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 实际完成人数</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div><div class="kpi-delta">↓ {sum_row["与目标之差"]} 人</div></div></div>', unsafe_allow_html=True)
+m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成比例</div><div class="kpi-body"><div class="kpi-value">{cum_rate_val:.2f}%</div></div></div>', unsafe_allow_html=True)
+m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 当前切片完成人数</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div></div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 6. 圖表展示
+# 6. 图表可视化展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 📊 圖表可視化分析")
+st.markdown("### 📊 图表可视化分析")
 c1, c2 = st.columns(2)
 
 with c1:
     fig_person = go.Figure(data=[
-        go.Bar(name="目標人數", x=PERSONS, y=[sum_row[f"{p}_目標"] for p in RAW_PERSONS], marker_color="#0B3C5D", text=[sum_row[f"{p}_目標"] for p in RAW_PERSONS], textposition="outside"),
-        go.Bar(name="實際完成", x=PERSONS, y=[sum_row[f"{p}_實際"] for p in RAW_PERSONS], marker_color="#FF3D00", text=[sum_row[f"{p}_實際"] for p in RAW_PERSONS], textposition="outside")
+        go.Bar(name="目标人数", x=PERSONS, y=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], marker_color="#0B3C5D", text=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], textposition="outside"),
+        go.Bar(name="实际完成", x=PERSONS, y=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], marker_color="#FF3D00", text=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], textposition="outside")
     ])
-    fig_person.update_layout(title="<b>各成員目標 vs 實際完成對比</b>", barmode="group", plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
+    fig_person.update_layout(title="<b>各成员目标 vs 实际完成对比</b>", barmode="group", plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_person, use_container_width=True)
 
 with c2:
-    active_majors = calc_df[calc_df["實際完成"] > 0].sort_values(by="實際完成", ascending=False)
+    active_majors = calc_df[calc_df["实际完成"] > 0].sort_values(by="实际完成", ascending=False)
     if not active_majors.empty:
-        fig_major = px.bar(active_majors, x="實際完成", y="專業/基礎名稱", orientation="h", title="<b>當前切片有成交的專業排行</b>", text="實際完成", color="專業/基礎名稱")
+        fig_major = px.bar(active_majors, x="实际完成", y="专业/基础名称", orientation="h", title="<b>当前切片有成交的专业排行</b>", text="实际完成", color="专业/基础名称")
         fig_major.update_traces(textposition="outside")
     else:
-        fig_major = px.bar(x=[0], y=["無成交記錄"], orientation="h", title="<b>當前切片無成交記錄</b>")
+        fig_major = px.bar(x=[0], y=["无成交记录"], orientation="h", title="<b>当前切片无成交记录</b>")
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), xaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_major, use_container_width=True)
