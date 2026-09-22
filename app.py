@@ -71,9 +71,9 @@ def save_all_to_db(raw_persons, person_animals, daily_deltas):
 init_db()
 
 # -----------------------------------------------------------------------------
-# 2. 页面基本配置与全局响应式 CSS 注入
+# 2. 頁面基本配置與全局響應式 CSS 注入
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="招生数据动态管理与多维分析系统", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="招生數據動態管理與多維分析系統", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -96,12 +96,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 招生数据动态管理与多维分析系统")
-st.caption("2026年9月数据 - 默认动物头像全脱敏模式 | 本地 SQLite 自动实时存储")
+st.title("📊 招生數據動態管理與多維分析系統")
+st.caption("2026年9月數據 - 默認動物頭像全脫敏模式 | 本地 SQLite 自動實時存儲")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 3. 基础数据定义与 Session State / SQLite 同步
+# 3. 基礎數據定義與 Session State / SQLite 同步
 # -----------------------------------------------------------------------------
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]), ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -132,10 +132,10 @@ def build_base_targets_df(persons):
         base_data.append(row)
     return pd.DataFrame(base_data)
 
-def reset_to_sep1_only():
+def reset_to_sep3_full():
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
-    # 包含了 9月1日 + 9月2日 完整真实成交流水
+    # 包含 9月1日、9月2日、9月3日 完整流水
     daily_deltas = {
         "9月1日": [
             ("环保专业", "覃小燕_实际", 1),
@@ -154,15 +154,45 @@ def reset_to_sep1_only():
             ("发输电专业", "其他人员_实际", 1),
             ("暖通基础", "其他人员_实际", 1),
             ("水利水电基础", "其他人员_实际", 1)
+        ],
+        "9月3日": [
+            ("环保基础", "覃小燕_实际", 1)
         ]
     }
     save_all_to_db(raw_persons, person_animals, daily_deltas)
     return raw_persons, person_animals, daily_deltas
 
+def ensure_latest_data_synced():
+    """核查數據庫，如缺失 9月2日 或 9月3日 的數據則自動補充追加"""
+    raw_persons, person_animals, daily_deltas = load_data_from_db()
+    if raw_persons is None:
+        return reset_to_sep3_full()
+    
+    updated = False
+    if "9月2日" not in daily_deltas or not daily_deltas["9月2日"]:
+        daily_deltas["9月2日"] = [
+            ("电气基础", "覃小燕_实际", 2),
+            ("环评专业", "左丹丹_实际", 1),
+            ("暖通专业", "梁书华_实际", 1),
+            ("发输电专业", "其他人员_实际", 1),
+            ("暖通基础", "其他人员_实际", 1),
+            ("水利水电基础", "其他人员_实际", 1)
+        ]
+        updated = True
+        
+    if "9月3日" not in daily_deltas or not daily_deltas["9月3日"]:
+        daily_deltas["9月3日"] = [
+            ("环保基础", "覃小燕_实际", 1)
+        ]
+        updated = True
+
+    if updated:
+        save_all_to_db(raw_persons, person_animals, daily_deltas)
+        
+    return raw_persons, person_animals, daily_deltas
+
 if "raw_persons" not in st.session_state:
-    db_raw_persons, db_person_animals, db_daily_deltas = load_data_from_db()
-    if db_raw_persons is None:
-        db_raw_persons, db_person_animals, db_daily_deltas = reset_to_sep1_only()
+    db_raw_persons, db_person_animals, db_daily_deltas = ensure_latest_data_synced()
     st.session_state["raw_persons"] = db_raw_persons
     st.session_state["person_animals"] = db_person_animals
     st.session_state["daily_deltas"] = db_daily_deltas
@@ -171,22 +201,22 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 侧边栏：脱敏管理 & 人员增删 & 数据备份恢复
+# 4. 側邊欄：脫敏管理 & 人員增刪 & 數據備份恢復
 # -----------------------------------------------------------------------------
-st.sidebar.title("🛠️ 数据管理与设置")
-enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
+st.sidebar.title("🛠️ 數據管理與設置")
+enable_anonymize = st.sidebar.checkbox("開啟數據脫敏 / 純動物符號模式", value=True)
 
 alias_map = {p: (st.session_state["person_animals"].get(p, "🐱") if enable_anonymize else p) for p in RAW_PERSONS}
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
 if enable_anonymize:
-    with st.sidebar.expander("👁️ 视角对照表（管理者隐私预览）", expanded=False):
-        st.dataframe(pd.DataFrame({"真实姓名": RAW_PERSONS, "代称动物": PERSONS}), hide_index=True, use_container_width=True)
+    with st.sidebar.expander("👁️ 視角對照表（管理者隱私預覽）", expanded=False):
+        st.dataframe(pd.DataFrame({"真實姓名": RAW_PERSONS, "代稱動物": PERSONS}), hide_index=True, use_container_width=True)
 
-with st.sidebar.expander("👥 人员增删管理"):
-    new_p_name = st.text_input("姓名", placeholder="例如：张三", key="new_person_name_input")
-    new_p_emoji = st.selectbox("分配动物标志", AVAL_ANIMALS, key="new_person_emoji_input")
-    if st.button("➕ 确认新增", use_container_width=True):
+with st.sidebar.expander("👥 人員增刪管理"):
+    new_p_name = st.text_input("姓名", placeholder="例如：張三", key="new_person_name_input")
+    new_p_emoji = st.selectbox("分配動物標誌", AVAL_ANIMALS, key="new_person_emoji_input")
+    if st.button("➕ 確認新增", use_container_width=True):
         if new_p_name and new_p_name not in RAW_PERSONS:
             st.session_state["raw_persons"].append(new_p_name)
             st.session_state["person_animals"][new_p_name] = new_p_emoji
@@ -195,41 +225,41 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷录入与删减招生数据
+# 5. 快捷錄入與刪減招生數據
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
-op_mode = st.sidebar.radio("操作模式：", ["➕ 新增完成人数", "➖ 删减完成人数"], horizontal=True)
+st.sidebar.subheader("✏️ 招生人數 增加 / 刪減")
+op_mode = st.sidebar.radio("操作模式：", ["➕ 新增完成人數", "➖ 刪減完成人數"], horizontal=True)
 
 with st.sidebar.form("add_delta_form", clear_on_submit=True):
-    input_date = st.selectbox("日期", DATES)
-    input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
-    input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
-    input_val = st.number_input("变动人数", min_value=1, value=1, step=1)
+    input_date = st.selectbox("日期", DATES, index=2)
+    input_major = st.selectbox("專業/基礎", list(st.session_state["base_targets"]["专业/基础名称"]))
+    input_person_disp = st.selectbox("歸屬人員", PERSONS + ["其他人員"])
+    input_val = st.number_input("變動人數", min_value=1, value=1, step=1)
 
-    if st.form_submit_button("确认提交修改", use_container_width=True):
+    if st.form_submit_button("確認提交修改", use_container_width=True):
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
-        target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
-        actual_change = int(input_val) if op_mode == "➕ 新增完成人数" else -int(input_val)
+        target_col = f"{raw_person_name}_實際" if raw_person_name != "其他人員" else "其他人員_實際"
+        actual_change = int(input_val) if op_mode == "➕ 新增完成人數" else -int(input_val)
         
         st.session_state["daily_deltas"].setdefault(input_date, []).append((input_major, target_col, actual_change))
         save_all_to_db(st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"])
         st.sidebar.success(f"已更新：{input_date} {input_major} - {input_person_disp}")
         st.rerun()
 
-with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
-    del_date = st.selectbox("选择要查验的日期：", DATES, key="del_date_sel")
+with st.sidebar.expander("🗑️ 招生流水明細與單條刪除"):
+    del_date = st.selectbox("選擇要查驗的日期：", DATES, index=2, key="del_date_sel")
     day_records = st.session_state["daily_deltas"].get(del_date, [])
     if not day_records:
-        st.info("该日期暂无记录")
+        st.info("該日期暫無記錄")
     else:
         for r_idx, item in enumerate(day_records):
             m_name, p_col, val_num = item if len(item) == 3 else ("电气基础", item[0], item[1])
-            p_raw = p_col.replace("_实际", "")
+            p_raw = p_col.replace("_實際", "")
             c_lbl, c_btn = st.columns([3, 1])
             c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num}人")
-            if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
+            if c_btn.button("刪除", key=f"del_{del_date}_{r_idx}"):
                 st.session_state["daily_deltas"][del_date].pop(r_idx)
                 if not st.session_state["daily_deltas"][del_date]:
                     del st.session_state["daily_deltas"][del_date]
@@ -237,55 +267,55 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
                 st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("💾 数据备份与恢复")
+st.sidebar.subheader("💾 數據備份與恢復")
 json_str = json.dumps({
     "raw_persons": st.session_state["raw_persons"],
     "person_animals": st.session_state["person_animals"],
     "daily_deltas": st.session_state["daily_deltas"]
 }, ensure_ascii=False, indent=2)
 
-st.sidebar.download_button("📤 导出 JSON 备份文件", data=json_str, file_name="招生数据备份.json", mime="application/json", use_container_width=True)
+st.sidebar.download_button("📤 導出 JSON 備份文件", data=json_str, file_name="招生數據備份.json", mime="application/json", use_container_width=True)
 
-uploaded_file = st.sidebar.file_uploader("📥 导入 JSON 恢复数据", type=["json"])
+uploaded_file = st.sidebar.file_uploader("📥 導入 JSON 恢復數據", type=["json"])
 if uploaded_file:
     try:
         data = json.load(uploaded_file)
         st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"] = data["raw_persons"], data["person_animals"], data["daily_deltas"]
         save_all_to_db(st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"])
-        st.sidebar.success("数据恢复成功！")
+        st.sidebar.success("數據恢復成功！")
         st.rerun()
     except Exception:
-        st.sidebar.error("备份文件格式不正确")
+        st.sidebar.error("備份文件格式不正確")
 
-if st.sidebar.button("💥 重置（初始化 9月1日-2日 数据）", use_container_width=True):
-    r_p, p_a, d_d = reset_to_sep1_only()
+if st.sidebar.button("💥 重置（初始化 9月1日-3日 全量數據）", use_container_width=True):
+    r_p, p_a, d_d = reset_to_sep3_full()
     st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"] = r_p, p_a, d_d
-    st.sidebar.info("已重置，已载入 9月1日-2日 初始数据！")
+    st.sidebar.info("已重置，已載入 9月1日-3日 完整初始數據！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. 时间汇总粒度筛选与 KPI 渲染
+# 6. 時間彙總粒度篩選與 KPI 渲染
 # -----------------------------------------------------------------------------
-st.subheader("🗓️ 时间汇总粒度筛选")
+st.subheader("🗓️ 時間彙總粒度篩選")
 f_col1, f_col2 = st.columns(2)
 
 with f_col1:
-    time_granularity_type = st.selectbox("选择时间汇总粒度：", ["按月（月度全量）", "按周（周度汇总）", "按日（单日切片）"])
+    time_granularity_type = st.selectbox("選擇時間彙總粒度：", ["按月（月度全量）", "按周（周度彙總）", "按日（單日切片）"])
 
 with f_col2:
-    if time_granularity_type == "按日（单日切片）":
-        selected_time_range = st.selectbox("选择具体日期：", DATES, index=1)
+    if time_granularity_type == "按日（單日切片）":
+        selected_time_range = st.selectbox("選擇具體日期：", DATES, index=2)
         selected_dates_list = [selected_time_range]
-    elif time_granularity_type == "按周（周度汇总）":
-        selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
+    elif time_granularity_type == "按周（周度彙總）":
+        selected_time_range = st.selectbox("選擇具體周：", ["2026年第36周 (9月1日-9月7日)"])
         selected_dates_list = DATES[:7]
     else:
-        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月"])
+        selected_time_range = st.selectbox("選擇具體月份：", ["2026年9月"])
         selected_dates_list = DATES
 
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
-    act_cols = [c for c in df_result.columns if c.endswith("_实际")]
+    act_cols = [c for c in df_result.columns if c.endswith("_實際")]
     for col in act_cols: df_result[col] = 0
 
     for d in dates_list:
@@ -320,13 +350,13 @@ rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 总目标人数</div><div class="kpi-body"><div class="kpi-value">{total_target_cum} 人</div></div></div>', unsafe_allow_html=True)
-m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 实际完成人数</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div><div class="kpi-delta">↓ {sum_row["与目标之差"]} 人</div></div></div>', unsafe_allow_html=True)
-m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成比例</div><div class="kpi-body"><div class="kpi-value">{cum_rate_val:.2f}%</div></div></div>', unsafe_allow_html=True)
-m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
+m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 總目標人數</div><div class="kpi-body"><div class="kpi-value">{total_target_cum} 人</div></div></div>', unsafe_allow_html=True)
+m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 實際完成人數</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div><div class="kpi-delta">↓ {sum_row["与目标之差"]} 人</div></div></div>', unsafe_allow_html=True)
+m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目標完成比例</div><div class="kpi-body"><div class="kpi-value">{cum_rate_val:.2f}%</div></div></div>', unsafe_allow_html=True)
+m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 選定區間日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 7. HTML 数据表格渲染 (底部完成比例居中)
+# 7. HTML 數據表格渲染
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -366,14 +396,14 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     </table></div></body></html>
     """
 
-st.markdown(f"### 📝 2026年9月招生数据动态表({selected_time_range})")
+st.markdown(f"### 📝 2026年9月招生數據動態表({selected_time_range})")
 st.components.v1.html(build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range), height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 8. 可视化图表展示
+# 8. 可視化圖表展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 📊 基础指标分析")
+st.markdown("### 📊 基礎指標分析")
 c1, c2 = st.columns(2)
 
 with c1:
@@ -381,36 +411,36 @@ with c1:
         go.Bar(name="目标人数", x=PERSONS, y=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], marker_color="#0B3C5D", text=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], textposition="outside"),
         go.Bar(name="实际完成", x=PERSONS, y=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], marker_color="#FF3D00", text=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], textposition="outside")
     ])
-    fig_person.update_layout(title="<b>各成员目标 vs 实际完成对比</b>", barmode="group", plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
+    fig_person.update_layout(title="<b>各成員目標 vs 實際完成對比</b>", barmode="group", plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_person, use_container_width=True)
 
 with c2:
     active_majors = calc_df[calc_df["实际完成"] > 0].sort_values(by="实际完成", ascending=False)
     if not active_majors.empty:
-        fig_major = px.bar(active_majors, x="实际完成", y="专业/基础名称", orientation="h", title="<b>当前切片有成交的专业排行</b>", text="实际完成", color="专业/基础名称", color_discrete_sequence=px.colors.qualitative.Bold)
+        fig_major = px.bar(active_majors, x="实际完成", y="专业/基础名称", orientation="h", title="<b>當前切片有成交的專業排行</b>", text="实际完成", color="专业/基础名称", color_discrete_sequence=px.colors.qualitative.Bold)
         fig_major.update_traces(textposition="outside")
     else:
-        fig_major = px.bar(x=[0], y=["无成交记录"], orientation="h", title="<b>当前切片无成交记录</b>")
+        fig_major = px.bar(x=[0], y=["无成交记录"], orientation="h", title="<b>當前切片無成交記錄</b>")
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), xaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_major, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. 动态趋势与人员贡献构成分析
+# 9. 動態趨勢與人員貢獻構成分析
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🔄 动态趋势与人员贡献构成分析")
+st.markdown("### 🔄 動態趨勢與人員貢獻構成分析")
 
 ctrl_c1, ctrl_c2 = st.columns(2)
 with ctrl_c1:
-    person_mode = st.radio("选择分析视角：", ["全体人员", "单人独立分析", "多人员对比分析"], horizontal=True)
+    person_mode = st.radio("選擇分析視角：", ["全體人員", "單人獨立分析", "多人員對比分析"], horizontal=True)
 
 with ctrl_c2:
-    if person_mode == "单人独立分析":
-        selected_person_disp = st.selectbox("选择分析成员：", PERSONS + ["其他人员"])
-    elif person_mode == "多人员对比分析":
-        selected_persons_disp = st.multiselect("选择对比成员：", PERSONS + ["其他人员"], default=PERSONS[:3] if len(PERSONS)>=3 else PERSONS)
+    if person_mode == "單人獨立分析":
+        selected_person_disp = st.selectbox("選擇分析成員：", PERSONS + ["其他人員"])
+    elif person_mode == "多人員對比分析":
+        selected_persons_disp = st.multiselect("選擇對比成員：", PERSONS + ["其他人員"], default=PERSONS[:3] if len(PERSONS)>=3 else PERSONS)
     else:
-        selected_person_disp = "全体人员"
+        selected_person_disp = "全體人員"
 
 time_records = []
 for d_idx, d in enumerate(DATES):
@@ -429,33 +459,33 @@ df_time_series = pd.DataFrame(time_records)
 df_time_series['日期'] = pd.Categorical(df_time_series['日期'], categories=DATES, ordered=True)
 df_time_series = df_time_series.sort_values('日期')
 
-if time_granularity_type == "按日（单日切片）":
+if time_granularity_type == "按日（單日切片）":
     df_time_series = df_time_series[df_time_series["日期"] == selected_time_range]
 
 chart_col1, chart_col2 = st.columns(2)
-is_single_day = (time_granularity_type == "按日（单日切片）")
+is_single_day = (time_granularity_type == "按日（單日切片）")
 
 with chart_col1:
-    if person_mode == "全体人员":
+    if person_mode == "全體人員":
         df_chart_line = df_time_series.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全体新增总量</b>", text="新增报名数", color_discrete_sequence=["#D50000"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全体人员招生趋势 (按日明细)</b>", text="新增报名数")
-    elif person_mode == "单人独立分析":
+        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>{selected_time_range} 全體新增總量</b>", text="新增报名数", color_discrete_sequence=["#D50000"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title="📈 <b>全體人員招生趨勢 (按日明細)</b>", text="新增报名数")
+    elif person_mode == "單人獨立分析":
         df_sub = df_time_series[df_time_series["人员"] == selected_person_disp]
         df_chart_line = df_sub.groupby("日期", as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趋势 (按日明细)</b>", text="新增报名数")
+        fig_line = px.bar(df_chart_line, x="日期", y="新增报名数", title=f"📊 <b>【{selected_person_disp}】{selected_time_range} 新增量</b>", text="新增报名数", color_discrete_sequence=["#2962FF"]) if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", markers=True, title=f"📈 <b>【{selected_person_disp}】趨勢 (按日明細)</b>", text="新增报名数")
     else:
         df_sub = df_time_series[df_time_series["人员"].isin(selected_persons_disp)]
         df_chart_line = df_sub.groupby(["日期", "人员"], as_index=False, sort=False)["新增报名数"].sum()
-        fig_line = px.bar(df_chart_line, x="人员", y="新增报名数", color="人员", title=f"📊 <b>{selected_time_range} 多人招生对比</b>", text="新增报名数") if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", color="人员", markers=True, title="📈 <b>多人招生趋势对比 (按日明细)</b>")
+        fig_line = px.bar(df_chart_line, x="人员", y="新增报名数", color="人员", title=f"📊 <b>{selected_time_range} 多人招生對比</b>", text="新增报名数") if is_single_day else px.line(df_chart_line, x="日期", y="新增报名数", color="人员", markers=True, title="📈 <b>多人招生趨勢對比 (按日明細)</b>")
 
     fig_line.update_layout(plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"), showlegend=(not is_single_day))
     st.plotly_chart(fig_line, use_container_width=True)
 
 with chart_col2:
-    if person_mode == "全体人员":
+    if person_mode == "全體人員":
         df_pie = df_time_series.groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie[df_pie["新增报名数"] > 0], values="新增报名数", names="人员", title="🍩 <b>全体人员招生贡献占比</b>", hole=0.4)
-    elif person_mode == "单人独立分析":
+        fig_pie = px.pie(df_pie[df_pie["新增报名数"] > 0], values="新增报名数", names="人员", title="🍩 <b>全體人員招生貢獻占比</b>", hole=0.4)
+    elif person_mode == "單人獨立分析":
         inv_map = {v: k for k, v in alias_map.items()}
         raw_sel_p = inv_map.get(selected_person_disp, selected_person_disp)
         major_records = []
@@ -466,18 +496,18 @@ with chart_col2:
         df_major_pie = pd.DataFrame(major_records)
         if not df_major_pie.empty:
             df_major_pie = df_major_pie.groupby("专业/基础", as_index=False)["新增人数"].sum()
-            fig_pie = px.pie(df_major_pie[df_major_pie["新增人数"] > 0], values="新增人数", names="专业/基础", title=f"🍩 <b>【{selected_person_disp}】专业成交构成</b>", hole=0.4)
+            fig_pie = px.pie(df_major_pie[df_major_pie["新增人数"] > 0], values="新增人数", names="专业/基础", title=f"🍩 <b>【{selected_person_disp}】專業成交構成</b>", hole=0.4)
         else:
             fig_pie = go.Figure()
     else:
         df_pie = df_time_series[df_time_series["人员"].isin(selected_persons_disp)].groupby("人员", as_index=False)["新增报名数"].sum()
-        fig_pie = px.pie(df_pie[df_pie["新增报名数"] > 0], values="新增报名数", names="人员", title="🍩 <b>对比成员占比构成</b>", hole=0.4)
+        fig_pie = px.pie(df_pie[df_pie["新增报名数"] > 0], values="新增报名数", names="人员", title="🍩 <b>對比成員占比構成</b>", hole=0.4)
 
     fig_pie.update_layout(paper_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20))
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 10. Excel 完整带样式导出 (完成比例整列居中)
+# 10. Excel 完整帶樣式導出
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -544,7 +574,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.border = BORDER_THIN
         curr_r += 1
 
-    # 渲染底部 2 行汇总
+    # 渲染底部 2 行彙總
     for r_data in [sum_row, diff_row]:
         ws.cell(row=curr_r, column=2, value=r_data["专业/基础名称"])
         ws.cell(row=curr_r, column=3, value=r_data.get("目标人数", ""))
@@ -575,7 +605,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.alignment = ALIGN_CENTER; cell.border = BORDER_THIN; cell.fill = PatternFill(start_color="D9EAD3", fill_type="solid")
         curr_r += 1
 
-    # 渲染底部居中的目标完成比例行
+    # 渲染底部居中的目標完成比例行
     ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=total_cols)
     ws.cell(row=curr_r, column=1, value=f"{rate_row['专业/基础名称']}：{rate_row['实际完成']}")
     for c in range(1, total_cols + 1):
@@ -588,9 +618,9 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
     return output.getvalue()
 
 st.markdown("---")
-st.markdown("### 📥 数据导出")
+st.markdown("### 📥 數據導出")
 st.download_button(
-    label="📥 导出带样式的 Excel 报表",
+    label="📥 導出帶樣式的 Excel 報表",
     data=export_color_excel(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS),
     file_name=f"2026年9月招生数据动态表_{selected_time_range}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
