@@ -135,7 +135,6 @@ def build_base_targets_df(persons):
 def reset_to_sep1_only():
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
-    # 仅填充 9月1日 最新真实成交数据，清空1-13日其他历史数据
     daily_deltas = {
         "9月1日": [
             ("环保专业", "覃小燕_实际", 1),
@@ -307,8 +306,7 @@ diff_row.update({"目标人数": "", "实际完成": "", "与目标之差": sum_
 total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
 cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
-rate_row = {c: "" for c in num_cols}
-rate_row.update({"专业/基础名称": "目标人数完成比例", "实际完成": f"{cum_rate_val:.2f}%"})
+rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f"{cum_rate_val:.2f}%"}
 
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
@@ -319,7 +317,7 @@ m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成
 m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 7. HTML 数据表格渲染 (对齐其他人员与目标汇总)
+# 7. HTML 数据表格渲染 (底部完成比例居中)
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -355,7 +353,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         {rows_html}
         <tr><td class="bg-total"></td><td class="bg-total zh"><b>{sum_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{sum_r['目标人数']}</b></td>{sum_person_cells}<td class="bg-total num"><b>0</b></td><td class="bg-total num"><b>{sum_r['其他人员_实际']}</b></td><td class="bg-total num"><b>{sum_r['目标人数']}</b></td><td class="bg-total num"><b>{sum_r['实际完成']}</b></td><td class="bg-total num"><b>{sum_r['与目标之差']}</b></td></tr>
         <tr><td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>{diff_person_cells}<td class="bg-total" colspan="2"><b class="num">{diff_r['其他人员_实际']}</b></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total num"><b>{diff_r['与目标之差']}</b></td></tr>
-        <tr><td class="bg-total" colspan="{total_colspan - 2}"></td><td class="bg-total zh"><b>{rate_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{rate_r['实际完成']}</b></td></tr>
+        <tr><td class="bg-total zh" colspan="{total_colspan}" style="text-align: center; font-size: 14px; padding: 8px 0;"><b>{rate_r['专业/基础名称']}：<span class="num">{rate_r['实际完成']}</span></b></td></tr>
     </table></div></body></html>
     """
 
@@ -470,7 +468,7 @@ with chart_col2:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 10. Excel 完整带样式导出
+# 10. Excel 完整带样式导出 (完成比例整列居中)
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -537,7 +535,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.border = BORDER_THIN
         curr_r += 1
 
-    # 渲染底部 3 行汇总
+    # 渲染底部 2 行汇总
     for r_data in [sum_row, diff_row]:
         ws.cell(row=curr_r, column=2, value=r_data["专业/基础名称"])
         ws.cell(row=curr_r, column=3, value=r_data.get("目标人数", ""))
@@ -568,12 +566,13 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell.alignment = ALIGN_CENTER; cell.border = BORDER_THIN; cell.fill = PatternFill(start_color="D9EAD3", fill_type="solid")
         curr_r += 1
 
-    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=total_cols - 2)
-    ws.cell(row=curr_r, column=total_cols - 1, value=rate_row["专业/基础名称"])
-    ws.cell(row=curr_r, column=total_cols, value=rate_row["实际完成"])
+    # 渲染底部居中的目标完成比例行
+    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=total_cols)
+    ws.cell(row=curr_r, column=1, value=f"{rate_row['专业/基础名称']}：{rate_row['实际完成']}")
     for c in range(1, total_cols + 1):
         cell = ws.cell(row=curr_r, column=c)
         cell.alignment = ALIGN_CENTER; cell.border = BORDER_THIN; cell.fill = PatternFill(start_color="D9EAD3", fill_type="solid")
+        cell.font = Font(name="SimSun", size=11, bold=True)
 
     output = io.BytesIO()
     wb.save(output)
