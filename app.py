@@ -135,6 +135,7 @@ def build_base_targets_df(persons):
 def reset_to_sep1_only():
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
+    # 包含了 9月1日 + 9月2日 完整真实成交流水
     daily_deltas = {
         "9月1日": [
             ("环保专业", "覃小燕_实际", 1),
@@ -145,6 +146,14 @@ def reset_to_sep1_only():
             ("暖通基础", "周欢喜_实际", 1),
             ("233网校", "其他人员_实际", 1),
             ("电气基础", "其他人员_实际", 1)
+        ],
+        "9月2日": [
+            ("电气基础", "覃小燕_实际", 2),
+            ("环评专业", "左丹丹_实际", 1),
+            ("暖通专业", "梁书华_实际", 1),
+            ("发输电专业", "其他人员_实际", 1),
+            ("暖通基础", "其他人员_实际", 1),
+            ("水利水电基础", "其他人员_实际", 1)
         ]
     }
     save_all_to_db(raw_persons, person_animals, daily_deltas)
@@ -248,10 +257,10 @@ if uploaded_file:
     except Exception:
         st.sidebar.error("备份文件格式不正确")
 
-if st.sidebar.button("💥 重置（仅保留9月1日数据）", use_container_width=True):
+if st.sidebar.button("💥 重置（初始化 9月1日-2日 数据）", use_container_width=True):
     r_p, p_a, d_d = reset_to_sep1_only()
     st.session_state["raw_persons"], st.session_state["person_animals"], st.session_state["daily_deltas"] = r_p, p_a, d_d
-    st.sidebar.info("已重置，仅保留9月1日数据！")
+    st.sidebar.info("已重置，已载入 9月1日-2日 初始数据！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
@@ -265,7 +274,7 @@ with f_col1:
 
 with f_col2:
     if time_granularity_type == "按日（单日切片）":
-        selected_time_range = st.selectbox("选择具体日期：", DATES, index=0)
+        selected_time_range = st.selectbox("选择具体日期：", DATES, index=1)
         selected_dates_list = [selected_time_range]
     elif time_granularity_type == "按周（周度汇总）":
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
