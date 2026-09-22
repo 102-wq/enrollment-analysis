@@ -9,12 +9,12 @@ import plotly.graph_objects as go
 from sqlalchemy import text
 
 # -----------------------------------------------------------------------------
-# 1. Supabase 云端数据库连线与持久化操作 (使用 st.connection)
+# 1. Supabase 雲端資料庫連線與持久化操作 (使用 st.connection)
 # -----------------------------------------------------------------------------
 conn = st.connection("supabase", type="sql")
 
 def init_db():
-    """自动初始化 Supabase 数据表（如未建立）"""
+    """自動初始化 Supabase 資料表（如未建立）"""
     with conn.session as s:
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS config (
@@ -35,7 +35,7 @@ def init_db():
         s.commit()
 
 def load_data_from_supabase():
-    """从 Supabase 实时读取人员配置与增量流水 (ttl=0 禁用缓存)"""
+    """從 Supabase 實時讀取人員配置與增量流水 (ttl=0 禁用快取)"""
     try:
         df_raw = conn.query("SELECT value FROM config WHERE key = 'raw_persons';", ttl=0)
         raw_persons = df_raw.iloc[0]['value'] if not df_raw.empty else None
@@ -53,11 +53,11 @@ def load_data_from_supabase():
 
         return raw_persons, person_animals, daily_deltas
     except Exception as e:
-        st.error(f"数据库读取失败: {e}")
+        st.error(f"資料庫讀取失敗: {e}")
         return None, None, {}
 
 def save_config_to_supabase(raw_persons, person_animals):
-    """保存人员及动物对照表配置至 Supabase"""
+    """保存人員及動物對照表配置至 Supabase"""
     with conn.session as s:
         s.execute(text("INSERT INTO config (key, value) VALUES ('raw_persons', :v) ON CONFLICT (key) DO UPDATE SET value = :v;"),
                   {"v": json.dumps(raw_persons, ensure_ascii=False)})
@@ -66,14 +66,14 @@ def save_config_to_supabase(raw_persons, person_animals):
         s.commit()
 
 def insert_delta_to_supabase(date_str, major, target_col, val):
-    """实时新增一条流水纪录"""
+    """實時新增一條流水紀錄"""
     with conn.session as s:
         s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
                   {"d": date_str, "m": major, "c": target_col, "v": val})
         s.commit()
 
 def delete_delta_from_supabase(date_str, major, target_col, val):
-    """实时删除一条流水纪录"""
+    """實時刪除一條流水紀錄"""
     with conn.session as s:
         s.execute(text("""
             DELETE FROM daily_deltas 
@@ -86,7 +86,7 @@ def delete_delta_from_supabase(date_str, major, target_col, val):
         s.commit()
 
 def reset_all_data_in_supabase():
-    """清空并重置 Supabase 数据为 9月1日-9月3日 完整初始数据"""
+    """清空並重置 Supabase 資料為 9月1日-9月3日 完整初始數據"""
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
     daily_deltas = {
@@ -122,9 +122,9 @@ def reset_all_data_in_supabase():
 init_db()
 
 # -----------------------------------------------------------------------------
-# 2. 页面基本配置与全局响应式 CSS 注入
+# 2. 頁面基本配置與全域響應式 CSS 注入
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="招生数据动态管理与多维分析系统", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="招生數據動態管理與多維分析系統", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -152,7 +152,7 @@ st.caption("2026年9月数据 - Supabase 云端实时同步版 | 数据永久保
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 3. 基础数据定义与 Supabase 数据加载
+# 3. 基礎數據定義與 Supabase 數據載入
 # -----------------------------------------------------------------------------
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]), ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -183,7 +183,6 @@ def build_base_targets_df(persons):
         base_data.append(row)
     return pd.DataFrame(base_data)
 
-# 每次运行都直接从 Supabase 读取最新状态
 db_raw_persons, db_person_animals, db_daily_deltas = load_data_from_supabase()
 
 if db_raw_persons is None:
@@ -196,7 +195,7 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 侧边栏：脱敏管理 & 人员增删
+# 4. 側邊欄：脫敏管理 & 人員增刪
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
@@ -220,7 +219,7 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷录入与删减招生数据 (直接写入 Supabase)
+# 5. 快捷錄入與刪減招生數據 (直接寫入 Supabase)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
@@ -237,10 +236,8 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
         target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
         
-        # 使用模糊匹配 '新增' 彻底避免繁简体判断导致的BUG
         actual_change = int(input_val) if "新增" in op_mode else -int(input_val)
         
-        # 实时写入 Supabase
         insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
         st.sidebar.success(f"已成功同步至云端：{input_date} {input_major} - {input_person_disp}")
         st.rerun()
@@ -262,13 +259,14 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
                 st.rerun()
 
 st.sidebar.markdown("---")
-if st.sidebar.button("💥 重置（初始化 9月1日-3日 全量数据）", use_container_width=True):
+# 修改重置按鈕文字
+if st.sidebar.button("💥 重置（初始化全量数据）", use_container_width=True):
     reset_all_data_in_supabase()
     st.sidebar.info("已重置 Supabase 云端数据库！")
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. 时间汇总粒度筛选与 KPI 渲染
+# 6. 時間彙總粒度篩選與 KPI 渲染
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 f_col1, f_col2 = st.columns(2)
@@ -330,7 +328,7 @@ m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成
 m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 7. HTML 数据表格渲染
+# 7. HTML 數據表格渲染
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -374,10 +372,12 @@ st.markdown(f"### 📝 2026年9月招生数据动态表({selected_time_range})")
 st.components.v1.html(build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range), height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 8. 可视化图表展示
+# 8. 視覺化圖表展示（柱狀圖、專業排行、折線圖、餅狀圖）
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 📊 基础指标分析")
+st.markdown("### 📊 多维数据分析图表")
+
+# 第一排圖表：柱狀圖 + 專業排行
 c1, c2 = st.columns(2)
 
 with c1:
@@ -398,8 +398,38 @@ with c2:
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), xaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_major, use_container_width=True)
 
+# 第二排圖表：折線圖 + 餅狀圖
+c3, c4 = st.columns(2)
+
+with c3:
+    # 算每日新增趨勢
+    daily_counts = []
+    for d in selected_dates_list:
+        records = st.session_state["daily_deltas"].get(d, [])
+        day_sum = sum([item[2] if len(item) == 3 else item[1] for item in records])
+        daily_counts.append({"日期": d, "每日新增": day_sum})
+    
+    df_trend = pd.DataFrame(daily_counts)
+    fig_trend = px.line(df_trend, x="日期", y="每日新增", markers=True, title="<b>每日新增招生趋势 (折线图)</b>", text="每日新增")
+    fig_trend.update_traces(textposition="top center", line_color="#2E7D32", line_width=3, marker_size=8)
+    fig_trend.update_layout(plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+with c4:
+    # 算各人員貢獻佔比
+    pie_labels = PERSONS + ["其他人员"]
+    pie_values = [sum_row[f"{p}_实际"] for p in RAW_PERSONS] + [sum_row["其他人员_实际"]]
+    
+    if sum(pie_values) > 0:
+        fig_pie = px.pie(names=pie_labels, values=pie_values, title="<b>人员招生贡献占比 (饼状图)</b>", hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_pie.update_traces(textinfo="label+percent+value")
+    else:
+        fig_pie = px.pie(names=["暂无数据"], values=[1], title="<b>人员招生贡献占比 (暂无数据)</b>", hole=0.3)
+    fig_pie.update_layout(margin=dict(l=20, r=20, t=50, b=20))
+    st.plotly_chart(fig_pie, use_container_width=True)
+
 # -----------------------------------------------------------------------------
-# 9. Excel 完整带样式导出
+# 9. Excel 完整帶樣式導出
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
