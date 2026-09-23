@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from sqlalchemy import text
 
 # -----------------------------------------------------------------------------
-# 1. Supabase 雲端資料庫連線與持久化操作 (使用 st.connection)
+# 1. Supabase 雲端資料庫連線與持久化操作
 # -----------------------------------------------------------------------------
 conn = st.connection("supabase", type="sql")
 
@@ -86,7 +86,7 @@ def delete_delta_from_supabase(date_str, major, target_col, val):
         s.commit()
 
 def reset_all_data_in_supabase():
-    """清空並重置 Supabase 資料為 9月1日-9月3日 完整初始數據"""
+    """清空並重置 Supabase 資料為初始數據"""
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
     daily_deltas = {
@@ -168,7 +168,6 @@ DEFAULT_MAJORS = [
 ]
 
 DATES = [f"9月{i}日" for i in range(1, 31)]
-WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一"] * 5
 ALL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥", "🐸", "🐷", "🐹", "🦄"]
 
 def build_base_targets_df(persons):
@@ -195,12 +194,15 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 側邊欄：脫敏管理 & 人員增刪
+# 4. 側邊欄：脫敏管理 & 映射關係（修正名稱映射問題）
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
 
+# 建立 正向 與 反向 名稱映射表
 alias_map = {p: (st.session_state["person_animals"].get(p, "🐱") if enable_anonymize else p) for p in RAW_PERSONS}
+inv_alias_map = {v: k for k, v in alias_map.items()}  # 顯示名稱 -> 真實姓名
+
 PERSONS = [alias_map[p] for p in RAW_PERSONS]
 
 if enable_anonymize:
@@ -227,7 +229,7 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷錄入與刪減招生數據 (支援 0.5 精度)
+# 5. 快捷錄入與刪減招生數據 (精準對應資料庫欄位)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
@@ -240,7 +242,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, value=0.5, step=0.5, format="%.1f")
 
     if st.form_submit_button("确认提交修改", use_container_width=True):
-        inv_alias_map = {v: k for k, v in alias_map.items()}
+        # 正確找到資料庫使用的真實姓名
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
         target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
         
@@ -261,7 +263,8 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
             val_num = float(val_num)
             p_raw = p_col.replace("_实际", "")
             c_lbl, c_btn = st.columns([3, 1])
-            c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num:.1f}".rstrip('0').rstrip('.') + "人")
+            disp_name = alias_map.get(p_raw, p_raw)
+            c_lbl.caption(f"{m_name} | {disp_name} | {'+' if val_num>0 else ''}{val_num:.1f}".rstrip('0').rstrip('.') + "人")
             if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
                 delete_delta_from_supabase(del_date, m_name, p_col, val_num)
                 st.sidebar.success("已从云端删除该条纪录")
@@ -274,7 +277,7 @@ if st.sidebar.button("💥 重置（初始化全量数据）", use_container_wid
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. 時間彙總粒度篩選與 KPI 渲染
+# 6. 時間彙總粒度篩選與數據計算
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 f_col1, f_col2 = st.columns(2)
@@ -339,16 +342,14 @@ rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
 def fmt_num(v):
-    """【重構修復】精確格式化數字：保留小數（如 0.5），整數則顯示整數（如 1），0 則顯示 0"""
+    """【精確格式化】小數位數只在有小數時才顯示（如 0.5），整數顯示整數，0 顯示 0"""
     if v == "" or v is None: 
         return ""
     try:
         val = float(v)
         if val == 0: 
             return "0"
-        # 使用清除末尾多餘 0 的精確小數位表示
-        formatted = f"{val:.2f}".rstrip('0').rstrip('.')
-        return formatted
+        return f"{val:.2f}".rstrip('0').rstrip('.')
     except (ValueError, TypeError):
         return str(v)
 
@@ -359,7 +360,7 @@ m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成
 m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 7. HTML 數據表格渲染
+# 7. HTML 表格渲染
 # -----------------------------------------------------------------------------
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
@@ -403,7 +404,7 @@ st.markdown(f"### 📝 2026年9月招生数据动态表({selected_time_range})")
 st.components.v1.html(build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range), height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 8. 視覺化圖表展示（柱狀圖、專業排行、折線圖、餅狀圖）
+# 8. 視覺化圖表展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 多维数据分析图表")
