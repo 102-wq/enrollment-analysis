@@ -9,12 +9,12 @@ import plotly.graph_objects as go
 from sqlalchemy import text
 
 # -----------------------------------------------------------------------------
-# 1. Supabase 雲端資料庫連線與持久化操作
+# 1. Supabase 云端数据库连线与持久化操作
 # -----------------------------------------------------------------------------
 conn = st.connection("supabase", type="sql")
 
 def init_db():
-    """自動初始化 Supabase 資料表（如未建立）"""
+    """自动初始化 Supabase 数据表（如未建立）"""
     with conn.session as s:
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS config (
@@ -35,7 +35,7 @@ def init_db():
         s.commit()
 
 def load_data_from_supabase():
-    """從 Supabase 實時讀取人員配置與增量流水 (ttl=0 禁用快取)"""
+    """从 Supabase 实时读取人员配置与增量流水 (ttl=0 禁用缓存)"""
     try:
         df_raw = conn.query("SELECT value FROM config WHERE key = 'raw_persons';", ttl=0)
         raw_persons = df_raw.iloc[0]['value'] if not df_raw.empty else None
@@ -51,17 +51,17 @@ def load_data_from_supabase():
                 d = row['date_str']
                 m = row['major']
                 col = row['target_col']
-                # 明确保留小数，避免后续显示/计算出现精度异常
+                # 明确转为 float 并保留1位小数
                 v = round(float(row['val']), 1)
                 daily_deltas.setdefault(d, []).append((m, col, v))
 
         return raw_persons, person_animals, daily_deltas
     except Exception as e:
-        st.error(f"資料庫讀取失敗: {e}")
+        st.error(f"数据库读取失败: {e}")
         return None, None, {}
 
 def save_config_to_supabase(raw_persons, person_animals):
-    """保存人員及動物對照表配置至 Supabase"""
+    """保存人员及动物对照表配置至 Supabase"""
     with conn.session as s:
         s.execute(text("INSERT INTO config (key, value) VALUES ('raw_persons', :v) ON CONFLICT (key) DO UPDATE SET value = :v;"),
                   {"v": json.dumps(raw_persons, ensure_ascii=False)})
@@ -70,14 +70,14 @@ def save_config_to_supabase(raw_persons, person_animals):
         s.commit()
 
 def insert_delta_to_supabase(date_str, major, target_col, val):
-    """實時新增一條流水紀錄"""
+    """实时新增一条流水纪录"""
     with conn.session as s:
         s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
                   {"d": date_str, "m": major, "c": target_col, "v": float(val)})
         s.commit()
 
 def delete_delta_from_supabase(date_str, major, target_col, val):
-    """實時刪除一條流水紀錄"""
+    """实时删除一条流水纪录"""
     with conn.session as s:
         s.execute(text("""
             DELETE FROM daily_deltas 
@@ -90,7 +90,7 @@ def delete_delta_from_supabase(date_str, major, target_col, val):
         s.commit()
 
 def reset_all_data_in_supabase():
-    """清空並重置 Supabase 資料為初始數據"""
+    """清空并重置 Supabase 数据为初始数据"""
     raw_persons = ["覃小燕", "左丹丹", "梁书华", "古晨晓", "周欢喜"]
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
     daily_deltas = {
@@ -126,9 +126,9 @@ def reset_all_data_in_supabase():
 init_db()
 
 # -----------------------------------------------------------------------------
-# 2. 頁面基本配置與全域響應式 CSS 注入
+# 2. 页面基本配置与全局响应式 CSS 注入
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="招生數據動態管理與多維分析系統", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="招生数据动态管理与多维分析系统", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -156,7 +156,7 @@ st.caption("2026年9月数据 - Supabase 云端实时同步版 | 数据永久保
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# 3. 基礎數據定義與 Supabase 數據載入
+# 3. 基础数据定义与 Supabase 数据载入
 # -----------------------------------------------------------------------------
 DEFAULT_MAJORS = [
     ("给排水专业", 19, [4, 3, 6, 3, 3]), ("发输电专业", 10, [2, 3, 2, 1, 2]),
@@ -184,7 +184,12 @@ def build_base_targets_df(persons):
         row["其他人员_目标"] = 0.0
         row["其他人员_实际"] = 0.0
         base_data.append(row)
-    return pd.DataFrame(base_data)
+    df = pd.DataFrame(base_data)
+    # 强制转换所有数值列为 float64
+    for c in df.columns:
+        if c not in ["序号", "专业/基础名称"]:
+            df[c] = df[c].astype("float64")
+    return df
 
 db_raw_persons, db_person_animals, db_daily_deltas = load_data_from_supabase()
 
@@ -198,7 +203,7 @@ st.session_state["base_targets"] = build_base_targets_df(st.session_state["raw_p
 RAW_PERSONS = st.session_state["raw_persons"]
 
 # -----------------------------------------------------------------------------
-# 4. 側邊欄：脫敏管理 & 映射關係
+# 4. 侧边栏：脱敏管理 & 映射关系
 # -----------------------------------------------------------------------------
 st.sidebar.title("🛠️ 数据管理与设置")
 enable_anonymize = st.sidebar.checkbox("开启数据脱敏 / 纯动物符号模式", value=True)
@@ -232,7 +237,7 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷錄入與刪減招生數據 (修復：防重複提交與 Session State 實時同步)
+# 5. 快捷录入与删减招生数据 (支持 0.5 & 防重复提交)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
@@ -243,13 +248,13 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
     
-    # 強制指定 float 型態與 step=0.5
+    # 强制指定 float 类型与 step=0.5
     input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, max_value=100.0, value=0.5, step=0.5, format="%.1f")
 
     submitted = st.form_submit_button("确认提交修改", use_container_width=True)
 
     if submitted:
-        # 防重複提交鎖：記錄提交特徵，避免一次點擊觸發二次 rerun 寫入
+        # 防重复提交特征锁
         submit_key = f"submit_{input_date}_{input_major}_{input_person_disp}_{input_val}_{op_mode}"
         
         if st.session_state.get("last_submit_key") != submit_key:
@@ -259,10 +264,10 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
             target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
             actual_change = float(input_val) if "新增" in op_mode else -float(input_val)
             
-            # 1. 寫入 Supabase 資料庫
+            # 1. 写入 Supabase
             insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
             
-            # 2. 實時同步 Session State，避免讀取延遲
+            # 2. 内存 Session State 实时同步
             if input_date not in st.session_state["daily_deltas"]:
                 st.session_state["daily_deltas"][input_date] = []
             st.session_state["daily_deltas"][input_date].append((input_major, target_col, round(actual_change, 1)))
@@ -285,6 +290,8 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
             c_lbl.caption(f"{m_name} | {disp_name} | {'+' if val_num>0 else ''}{val_num:.1f}".rstrip('0').rstrip('.') + "人")
             if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
                 delete_delta_from_supabase(del_date, m_name, p_col, val_num)
+                # 同时从 session state 中移除
+                st.session_state["daily_deltas"][del_date].pop(r_idx)
                 st.sidebar.success("已从云端删除该条纪录")
                 st.rerun()
 
@@ -295,7 +302,7 @@ if st.sidebar.button("💥 重置（初始化全量数据）", use_container_wid
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. 時間彙總粒度篩選與數據計算
+# 6. 时间汇总粒度筛选与数据计算 (核心修復：防止 Pandas 将 Float 转为 Int)
 # -----------------------------------------------------------------------------
 st.subheader("🗓️ 时间汇总粒度筛选")
 f_col1, f_col2 = st.columns(2)
@@ -324,26 +331,27 @@ with f_col2:
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
     act_cols = [c for c in df_result.columns if c.endswith("_实际")]
+    
+    # 强制将所有实际列转为 float64，严禁被隐式转换为 int
     for col in act_cols: 
         df_result[col] = 0.0
+        df_result[col] = df_result[col].astype("float64")
 
     for d in dates_list:
         for item in st.session_state["daily_deltas"].get(d, []):
             major, col, val = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
             if col in df_result.columns:
-                # 使用 loc 累加，并统一保留1位小数
                 mask = df_result["专业/基础名称"] == major
-                df_result.loc[mask, col] = (
-                    df_result.loc[mask, col].astype(float) + round(float(val), 1)
-                ).round(1)
+                if mask.any():
+                    curr_v = float(df_result.loc[mask, col].values[0])
+                    df_result.loc[mask, col] = round(curr_v + float(val), 1)
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
 act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
-calc_df["实际完成"] = calc_df[act_cols].sum(axis=1).round(1)
-calc_df["与目标之差"] = (
-    calc_df["实际完成"] - calc_df["目标人数"]
-).round(1)
+
+calc_df["实际完成"] = calc_df[act_cols].sum(axis=1).astype("float64").round(1)
+calc_df["与目标之差"] = (calc_df["实际完成"] - calc_df["目标人数"]).astype("float64").round(1)
 
 num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
 sum_row = {"专业/基础名称": "合计"}
@@ -376,21 +384,16 @@ avg_per_day = round(
 ) if len(selected_dates_list) > 0 else 0.0
 
 def fmt_num(v):
-    """统一数字显示，确保 0.5 等小数不会在表格中被显示为整数。"""
+    """修復版格式化函数：小数保留1位，整数只显示整数形态"""
     if v == "" or v is None:
         return ""
     try:
         val = float(v)
-
-        # 消除浮点计算产生的极小误差，例如 0.49999999999999994
         val = round(val, 1)
-
-        # 避免显示 -0.0
-        if abs(val) < 0.000001:
-            val = 0.0
-
-        # 整数仍显示整数，小数保留1位
-        if val.is_integer():
+        if abs(val) < 1e-6:
+            return "0"
+        # 判断是否为整数
+        if val % 1 == 0:
             return str(int(val))
         return f"{val:.1f}"
     except (ValueError, TypeError):
@@ -438,7 +441,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         <tr>{sub_headers}</tr>
         {rows_html}
         <tr><td class="bg-total"></td><td class="bg-total zh"><b>{sum_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['目标人数'])}</b></td>{sum_person_cells}<td class="bg-total num"><b>0</b></td><td class="bg-total num"><b>{fmt_num(sum_r['其他人员_实际'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['目标人数'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['实际完成'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['与目标之差'])}</b></td></tr>
-        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>{diff_person_cells}<td class="bg-total" colspan="2"><b class="num">{fmt_num(diff_r['其他人员_实际'])}</b></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total num"><b>{fmt_num(diff_r['与目标之差'])}</b></td></tr>
+        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>{diff_person_cells}<td class="bg-total" colspan="2"><b class="num">{fmt_num(diff_r['策略/其他'] if '策略/其他' in diff_r else diff_r['其他人员_实际'])}</b></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total num"><b>{fmt_num(diff_r['与目标之差'])}</b></td></tr>
         <tr><td class="bg-total zh" colspan="{total_colspan}" style="text-align: center; font-size: 14px; padding: 8px 0;"><b>{rate_r['专业/基础名称']}：<span class="num">{rate_r['实际完成']}</span></b></td></tr>
     </table></div></body></html>
     """
@@ -447,7 +450,7 @@ st.markdown(f"### 📝 2026年9月招生数据动态表({selected_time_range})")
 st.components.v1.html(build_html_document(calc_df, sum_row, diff_row, rate_row, PERSONS, RAW_PERSONS, selected_time_range), height=680, scrolling=True)
 
 # -----------------------------------------------------------------------------
-# 8. 視覺化圖表展示
+# 8. 视觉化图表展示
 # -----------------------------------------------------------------------------
 st.markdown("---")
 st.markdown("### 📊 多维数据分析图表")
@@ -500,7 +503,7 @@ with c4:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 # -----------------------------------------------------------------------------
-# 9. Excel 完整帶樣式導出
+# 9. Excel 完整带样式导出
 # -----------------------------------------------------------------------------
 def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_persons):
     wb = openpyxl.Workbook()
@@ -565,7 +568,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell = ws.cell(row=curr_r, column=c)
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
-            # 数字列统一保留1位小数，0.5 在 Excel 中不会显示成 1
+            # Excel 单元格保留 1 位小数格式
             if c >= 3:
                 cell.number_format = '0.0'
         curr_r += 1
