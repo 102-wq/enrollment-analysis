@@ -48,7 +48,11 @@ def load_data_from_supabase():
         daily_deltas = {}
         if not df_deltas.empty:
             for _, row in df_deltas.iterrows():
-                d, m, col, v = row['date_str'], row['major'], row['target_col'], float(row['val'])
+                d = row['date_str']
+                m = row['major']
+                col = row['target_col']
+                # 明确保留小数，避免后续显示/计算出现精度异常
+                v = round(float(row['val']), 1)
                 daily_deltas.setdefault(d, []).append((m, col, v))
 
         return raw_persons, person_animals, daily_deltas
@@ -313,19 +317,27 @@ def get_processed_df_by_dates(dates_list):
         for item in st.session_state["daily_deltas"].get(d, []):
             major, col, val = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
             if col in df_result.columns:
-                # 使用 loc 累加並強制轉 float
-                df_result.loc[df_result["专业/基础名称"] == major, col] += float(val)
+                # 使用 loc 累加，并统一保留1位小数
+                mask = df_result["专业/基础名称"] == major
+                df_result.loc[mask, col] = (
+                    df_result.loc[mask, col].astype(float) + round(float(val), 1)
+                ).round(1)
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
 act_cols = [c for c in calc_df.columns if c.endswith("_实际")]
-calc_df["实际完成"] = calc_df[act_cols].sum(axis=1)
-calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
+calc_df["实际完成"] = calc_df[act_cols].sum(axis=1).round(1)
+calc_df["与目标之差"] = (
+    calc_df["实际完成"] - calc_df["目标人数"]
+).round(1)
 
 num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
 sum_row = {"专业/基础名称": "合计"}
-for c in num_cols: 
-    sum_row[c] = float(calc_df[c].sum())
+for c in num_cols:
+    if c in calc_df.columns and pd.api.types.is_numeric_dtype(calc_df[c]):
+        sum_row[c] = round(float(calc_df[c].sum()), 1)
+    else:
+        sum_row[c] = float(calc_df[c].sum())
 
 diff_row = {"专业/基础名称": "与目标之差"}
 for p in RAW_PERSONS:
@@ -337,24 +349,36 @@ diff_row.update({"目标人数": "", "实际完成": "", "与目标之差": sum_
 
 total_target_cum = sum_row["目标人数"]
 total_actual_cum = sum_row["实际完成"]
-cum_rate_val = (total_actual_cum / total_target_cum * 100) if total_target_cum > 0 else 0
+cum_rate_val = round(
+    (float(total_actual_cum) / float(total_target_cum) * 100)
+    if total_target_cum > 0 else 0,
+    2
+)
 rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f"{cum_rate_val:.2f}%"}
 
-avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
+avg_per_day = round(
+    float(total_actual_cum) / len(selected_dates_list),
+    1
+) if len(selected_dates_list) > 0 else 0.0
 
 def fmt_num(v):
-    """【終極修復格式化函數】防吃小數"""
-    if v == "" or v is None: 
+    """统一数字显示，确保 0.5 等小数不会在表格中被显示为整数。"""
+    if v == "" or v is None:
         return ""
     try:
         val = float(v)
-        if val == 0: 
-            return "0"
-        # 如果是整數（如 1.0），顯示 1；如果是小數（如 0.5），精確顯示 0.5
+
+        # 消除浮点计算产生的极小误差，例如 0.49999999999999994
+        val = round(val, 1)
+
+        # 避免显示 -0.0
+        if abs(val) < 0.000001:
+            val = 0.0
+
+        # 整数仍显示整数，小数保留1位
         if val.is_integer():
             return str(int(val))
-        else:
-            return f"{val:.1f}"
+        return f"{val:.1f}"
     except (ValueError, TypeError):
         return str(v)
 
@@ -514,11 +538,11 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
         c_offset = 4
         for rp in raw_persons:
             ws.cell(row=curr_r, column=c_offset, value=row[f"{rp}_目标"])
-            ws.cell(row=curr_r, column=c_offset + 1, value=row[f"{rp}_实际"] or "")
+            ws.cell(row=curr_r, column=c_offset + 1, value=round(float(row[f"{rp}_实际"]), 1) if row[f"{rp}_实际"] != "" else "")
             c_offset += 2
 
         ws.cell(row=curr_r, column=c_offset, value=row.get("其他人员_目标", 0) or "")
-        ws.cell(row=curr_r, column=c_offset + 1, value=row.get("其他人员_实际", 0) or "")
+        ws.cell(row=curr_r, column=c_offset + 1, value=round(float(row.get("其他人员_实际", 0)), 1) if row.get("其他人员_实际", 0) != "" else "")
         ws.cell(row=curr_r, column=c_offset + 2, value=row["目标人数"])
         ws.cell(row=curr_r, column=c_offset + 3, value=row["实际完成"])
         ws.cell(row=curr_r, column=c_offset + 4, value=row["与目标之差"])
@@ -527,6 +551,9 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
             cell = ws.cell(row=curr_r, column=c)
             cell.alignment = ALIGN_CENTER
             cell.border = BORDER_THIN
+            # 数字列统一保留1位小数，0.5 在 Excel 中不会显示成 1
+            if c >= 3:
+                cell.number_format = '0.0'
         curr_r += 1
 
     for r_data in [sum_row, diff_row]:
@@ -556,7 +583,11 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 
         for c in range(1, total_cols + 1):
             cell = ws.cell(row=curr_r, column=c)
-            cell.alignment = ALIGN_CENTER; cell.border = BORDER_THIN; cell.fill = PatternFill(start_color="D9EAD3", fill_type="solid")
+            cell.alignment = ALIGN_CENTER
+            cell.border = BORDER_THIN
+            cell.fill = PatternFill(start_color="D9EAD3", fill_type="solid")
+            if c >= 3:
+                cell.number_format = '0.0'
         curr_r += 1
 
     ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=total_cols)
