@@ -174,11 +174,11 @@ ALL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "
 def build_base_targets_df(persons):
     base_data = []
     for idx, (name, total_target, person_tgts) in enumerate(DEFAULT_MAJORS, 1):
-        row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
+        row = {"序号": idx, "专业/基础名称": name, "目标人数": float(total_target)}
         for p_idx, p in enumerate(persons):
-            row[f"{p}_目标"] = person_tgts[p_idx] if p_idx < len(person_tgts) else 0
+            row[f"{p}_目标"] = float(person_tgts[p_idx]) if p_idx < len(person_tgts) else 0.0
             row[f"{p}_实际"] = 0.0
-        row["其他人员_目标"] = 0
+        row["其他人员_目标"] = 0.0
         row["其他人员_实际"] = 0.0
         base_data.append(row)
     return pd.DataFrame(base_data)
@@ -207,7 +207,6 @@ if enable_anonymize:
     with st.sidebar.expander("👁️ 视角对照表（管理者隐私预览）", expanded=False):
         st.dataframe(pd.DataFrame({"真实姓名": RAW_PERSONS, "代称动物": PERSONS}), hide_index=True, use_container_width=True)
 
-# 動態過濾已使用過的動物 Emoji
 used_animals = set(st.session_state["person_animals"].values())
 available_animals = [a for a in ALL_ANIMALS if a not in used_animals]
 
@@ -238,8 +237,7 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_date = st.selectbox("日期", DATES, index=2)
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
-    # 精度改為 0.5，步長 0.5
-    input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, value=1.0, step=0.5, format="%.1f")
+    input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, value=0.5, step=0.5, format="%.1f")
 
     if st.form_submit_button("确认提交修改", use_container_width=True):
         inv_alias_map = {v: k for k, v in alias_map.items()}
@@ -281,7 +279,7 @@ st.subheader("🗓️ 时间汇总粒度筛选")
 f_col1, f_col2 = st.columns(2)
 
 with f_col1:
-    time_granularity_type = st.selectbox("选择时间汇总粒度：", ["按月（月度全量）", "按周（周度汇总）", "按日（单日切片）"])
+    time_granularity_type = st.selectbox("选择时间汇总粒度：", ["按月（全月 / 累计至指定日期）", "按周（周度汇总）", "按日（单日切片）"])
 
 with f_col2:
     if time_granularity_type == "按日（单日切片）":
@@ -291,8 +289,15 @@ with f_col2:
         selected_time_range = st.selectbox("选择具体周：", ["2026年第36周 (9月1日-9月7日)"])
         selected_dates_list = DATES[:7]
     else:
-        selected_time_range = st.selectbox("选择具体月份：", ["2026年9月"])
-        selected_dates_list = DATES
+        month_scope = st.radio("月度统计范围：", ["9月全月（9月1日-9月30日）", "累计至指定日期（如 9月1日-9月10日）"], horizontal=True)
+        if "全月" in month_scope:
+            selected_time_range = "2026年9月全月"
+            selected_dates_list = DATES
+        else:
+            end_date = st.selectbox("选择截止日期（包含当日）：", DATES, index=9)
+            end_idx = DATES.index(end_date) + 1
+            selected_dates_list = DATES[:end_idx]
+            selected_time_range = f"9月1日 至 {end_date} 累计"
 
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
@@ -320,7 +325,7 @@ for p in RAW_PERSONS:
     diff_row[f"{p}_目标"] = ""
     diff_row[f"{p}_实际"] = round(sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"], 2)
 diff_row["其他人员_目标"] = ""
-diff_row["其他人员_实际"] = sum_row["其他人员_实际"]
+diff_row["其他人员_实际"] = sum_row["情绪人员_实际"] if "情绪人员_实际" in sum_row else sum_row.get("其他人员_实际", 0.0)
 diff_row.update({"目标人数": "", "实际完成": "", "与目标之差": sum_row["与目标之差"]})
 
 total_target_cum = sum_row["目标人数"]
@@ -331,10 +336,12 @@ rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
 def fmt_num(v):
+    """格式化數字：如果為 0 且非目標欄位則可返回空字串，如果有小數點且不為 0 則顯示小數点，整數則顯示整數"""
     if v == "" or v is None: return ""
     try:
         val = float(v)
-        return f"{val:g}"
+        if val == 0: return "0"
+        return f"{val:g}" if val % 1 != 0 else f"{int(val)}"
     except:
         return str(v)
 
@@ -351,7 +358,7 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
     rows_html = ""
     for idx, row in df.iterrows():
         person_cells = "".join([f'<td class="num">{fmt_num(row[f"{rp}_目标"])}</td><td class="num">{fmt_num(row[f"{rp}_实际"])}</td>' for rp in raw_p_names])
-        rows_html += f'<tr><td class="num">{row["序号"]}</td><td class="zh">{row["专业/基础名称"]}</td><td class="num">{fmt_num(row["目标人数"])}</td>{person_cells}<td class="num">{fmt_num(row["其他人员_目标"])}</td><td class="num">{fmt_num(row["其他人员_实际"])}</td><td class="num">{fmt_num(row["目标人数"])}</td><td class="num">{fmt_num(row["实际完成"])}</td><td class="num">{fmt_num(row["与目标之差"])}</td></tr>'
+        rows_html += f'<tr><td class="num">{int(row["序号"])}</td><td class="zh">{row["专业/基础名称"]}</td><td class="num">{fmt_num(row["目标人数"])}</td>{person_cells}<td class="num">{fmt_num(row["其他人员_目标"])}</td><td class="num">{fmt_num(row["其他人员_实际"])}</td><td class="num">{fmt_num(row["目标人数"])}</td><td class="num">{fmt_num(row["实际完成"])}</td><td class="num">{fmt_num(row["与目标之差"])}</td></tr>'
 
     person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
     sub_headers = '<th class="bg-header">目标</th><th class="bg-header">实际</th>' * (len(p_names) + 1)
@@ -487,7 +494,7 @@ def export_color_excel(calc_df, sum_row, diff_row, rate_row, persons_disp, raw_p
 
     curr_r = 4
     for idx, row in calc_df.iterrows():
-        ws.cell(row=curr_r, column=1, value=row["序号"])
+        ws.cell(row=curr_r, column=1, value=int(row["序号"]))
         ws.cell(row=curr_r, column=2, value=row["专业/基础名称"])
         ws.cell(row=curr_r, column=3, value=row["目标人数"])
 
