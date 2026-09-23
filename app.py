@@ -1,5 +1,6 @@
 import io
 import json
+from decimal import Decimal, ROUND_HALF_UP
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 import pandas as pd
@@ -51,8 +52,8 @@ def load_data_from_supabase():
                 d = row['date_str']
                 m = row['major']
                 col = row['target_col']
-                # 明确保留小数，避免后续显示/计算出现精度异常
-                v = round(float(row['val']), 1)
+                # 使用 Decimal 精确读取，避免 0.5 在浮点计算中出现异常
+                v = float(Decimal(str(row['val'])).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
                 daily_deltas.setdefault(d, []).append((m, col, v))
 
         return raw_persons, person_animals, daily_deltas
@@ -70,10 +71,13 @@ def save_config_to_supabase(raw_persons, person_animals):
         s.commit()
 
 def insert_delta_to_supabase(date_str, major, target_col, val):
-    """實時新增一條流水紀錄"""
+    """实时新增一条流水记录；人数按 0.5 人为最小单位精确保存。"""
+    exact_val = Decimal(str(val)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
     with conn.session as s:
-        s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
-                  {"d": date_str, "m": major, "c": target_col, "v": float(val)})
+        s.execute(
+            text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
+            {"d": date_str, "m": major, "c": target_col, "v": exact_val}
+        )
         s.commit()
 
 def delete_delta_from_supabase(date_str, major, target_col, val):
@@ -243,18 +247,31 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
     
-    # 強制指定 float 型態與 step=0.5
-    input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, max_value=100.0, value=0.5, step=0.5, format="%.1f")
+    # 人数输入严格以 0.5 人为单位；数据库也以 NUMERIC 精确保存
+    input_val = st.number_input(
+        "变动人数（支持 0.5 人）",
+        min_value=0.5,
+        max_value=100.0,
+        value=0.5,
+        step=0.5,
+        format="%.1f"
+    )
 
     if st.form_submit_button("确认提交修改", use_container_width=True):
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
         target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
-        
-        actual_change = float(input_val) if "新增" in op_mode else -float(input_val)
-        
-        insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
-        st.sidebar.success(f"已成功同步至云端：{input_date} {input_major} - {input_person_disp} ({actual_change:+.1f}人)")
-        st.rerun()
+
+        exact_input = Decimal(str(input_val)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if (exact_input * 2) != (exact_input * 2).to_integral_value():
+            st.sidebar.error("人数必须以 0.5 人为最小单位。")
+        else:
+            actual_change = exact_input if "新增" in op_mode else -exact_input
+            insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
+            st.sidebar.success(
+                f"已成功同步至云端：{input_date} {input_major} - {input_person_disp} "
+                f"({actual_change:+.1f}人)"
+            )
+            st.rerun()
 
 with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
     del_date = st.selectbox("选择要查验的日期：", DATES, index=2, key="del_date_sel")
@@ -317,11 +334,11 @@ def get_processed_df_by_dates(dates_list):
         for item in st.session_state["daily_deltas"].get(d, []):
             major, col, val = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
             if col in df_result.columns:
-                # 使用 loc 累加，并统一保留1位小数
                 mask = df_result["专业/基础名称"] == major
-                df_result.loc[mask, col] = (
-                    df_result.loc[mask, col].astype(float) + round(float(val), 1)
-                ).round(1)
+                current = Decimal(str(df_result.loc[mask, col].iloc[0])) if mask.any() else Decimal("0")
+                exact_val = Decimal(str(val)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+                new_val = (current + exact_val).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+                df_result.loc[mask, col] = float(new_val)
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
