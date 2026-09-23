@@ -1,6 +1,5 @@
 import io
 import json
-from decimal import Decimal, ROUND_HALF_UP
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 import pandas as pd
@@ -52,8 +51,8 @@ def load_data_from_supabase():
                 d = row['date_str']
                 m = row['major']
                 col = row['target_col']
-                # 使用 Decimal 精确读取，避免 0.5 在浮点计算中出现异常
-                v = float(Decimal(str(row['val'])).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+                # 明确保留小数，避免后续显示/计算出现精度异常
+                v = round(float(row['val']), 1)
                 daily_deltas.setdefault(d, []).append((m, col, v))
 
         return raw_persons, person_animals, daily_deltas
@@ -71,13 +70,10 @@ def save_config_to_supabase(raw_persons, person_animals):
         s.commit()
 
 def insert_delta_to_supabase(date_str, major, target_col, val):
-    """实时新增一条流水记录；人数按 0.5 人为最小单位精确保存。"""
-    exact_val = Decimal(str(val)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+    """實時新增一條流水紀錄"""
     with conn.session as s:
-        s.execute(
-            text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
-            {"d": date_str, "m": major, "c": target_col, "v": exact_val}
-        )
+        s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
+                  {"d": date_str, "m": major, "c": target_col, "v": float(val)})
         s.commit()
 
 def delete_delta_from_supabase(date_str, major, target_col, val):
@@ -236,7 +232,7 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷錄入與刪減招生數據 (支援 0.5 強制浮點數)
+# 5. 快捷錄入與刪減招生數據 (修復：防重複提交與 Session State 實時同步)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
@@ -247,30 +243,31 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
     
-    # 人数输入严格以 0.5 人为单位；数据库也以 NUMERIC 精确保存
-    input_val = st.number_input(
-        "变动人数（支持 0.5 人）",
-        min_value=0.5,
-        max_value=100.0,
-        value=0.5,
-        step=0.5,
-        format="%.1f"
-    )
+    # 強制指定 float 型態與 step=0.5
+    input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, max_value=100.0, value=0.5, step=0.5, format="%.1f")
 
-    if st.form_submit_button("确认提交修改", use_container_width=True):
-        raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
-        target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
+    submitted = st.form_submit_button("确认提交修改", use_container_width=True)
 
-        exact_input = Decimal(str(input_val)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if (exact_input * 2) != (exact_input * 2).to_integral_value():
-            st.sidebar.error("人数必须以 0.5 人为最小单位。")
-        else:
-            actual_change = exact_input if "新增" in op_mode else -exact_input
+    if submitted:
+        # 防重複提交鎖：記錄提交特徵，避免一次點擊觸發二次 rerun 寫入
+        submit_key = f"submit_{input_date}_{input_major}_{input_person_disp}_{input_val}_{op_mode}"
+        
+        if st.session_state.get("last_submit_key") != submit_key:
+            st.session_state["last_submit_key"] = submit_key
+            
+            raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
+            target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
+            actual_change = float(input_val) if "新增" in op_mode else -float(input_val)
+            
+            # 1. 寫入 Supabase 資料庫
             insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
-            st.sidebar.success(
-                f"已成功同步至云端：{input_date} {input_major} - {input_person_disp} "
-                f"({actual_change:+.1f}人)"
-            )
+            
+            # 2. 實時同步 Session State，避免讀取延遲
+            if input_date not in st.session_state["daily_deltas"]:
+                st.session_state["daily_deltas"][input_date] = []
+            st.session_state["daily_deltas"][input_date].append((input_major, target_col, round(actual_change, 1)))
+            
+            st.sidebar.success(f"已成功同步至云端：{input_date} {input_major} - {input_person_disp} ({actual_change:+.1f}人)")
             st.rerun()
 
 with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
@@ -334,11 +331,11 @@ def get_processed_df_by_dates(dates_list):
         for item in st.session_state["daily_deltas"].get(d, []):
             major, col, val = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
             if col in df_result.columns:
+                # 使用 loc 累加，并统一保留1位小数
                 mask = df_result["专业/基础名称"] == major
-                current = Decimal(str(df_result.loc[mask, col].iloc[0])) if mask.any() else Decimal("0")
-                exact_val = Decimal(str(val)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-                new_val = (current + exact_val).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-                df_result.loc[mask, col] = float(new_val)
+                df_result.loc[mask, col] = (
+                    df_result.loc[mask, col].astype(float) + round(float(val), 1)
+                ).round(1)
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
