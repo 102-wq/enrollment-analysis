@@ -257,10 +257,11 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
         st.info("该日期暂无记录")
     else:
         for r_idx, item in enumerate(day_records):
-            m_name, p_col, val_num = item if len(item) == 3 else ("电气基础", item[0], item[1])
+            m_name, p_col, val_num = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
+            val_num = float(val_num)
             p_raw = p_col.replace("_实际", "")
             c_lbl, c_btn = st.columns([3, 1])
-            c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num:g}人")
+            c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num:.1f}".rstrip('0').rstrip('.') + "人")
             if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
                 delete_delta_from_supabase(del_date, m_name, p_col, val_num)
                 st.sidebar.success("已从云端删除该条纪录")
@@ -302,11 +303,12 @@ with f_col2:
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
     act_cols = [c for c in df_result.columns if c.endswith("_实际")]
-    for col in act_cols: df_result[col] = 0.0
+    for col in act_cols: 
+        df_result[col] = 0.0
 
     for d in dates_list:
         for item in st.session_state["daily_deltas"].get(d, []):
-            major, col, val = item if len(item) == 3 else ("电气基础", item[0], item[1])
+            major, col, val = item if len(item) == 3 else ("电气基础", item[0], float(item[1]))
             if col in df_result.columns:
                 df_result.loc[df_result["专业/基础名称"] == major, col] += float(val)
     return df_result
@@ -318,14 +320,15 @@ calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
 num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
 sum_row = {"专业/基础名称": "合计"}
-for c in num_cols: sum_row[c] = round(float(calc_df[c].sum()), 2)
+for c in num_cols: 
+    sum_row[c] = round(float(calc_df[c].sum()), 2)
 
 diff_row = {"专业/基础名称": "与目标之差"}
 for p in RAW_PERSONS:
     diff_row[f"{p}_目标"] = ""
     diff_row[f"{p}_实际"] = round(sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"], 2)
 diff_row["其他人员_目标"] = ""
-diff_row["其他人员_实际"] = sum_row["情绪人员_实际"] if "情绪人员_实际" in sum_row else sum_row.get("其他人员_实际", 0.0)
+diff_row["其他人员_实际"] = sum_row.get("其他人员_实际", 0.0)
 diff_row.update({"目标人数": "", "实际完成": "", "与目标之差": sum_row["与目标之差"]})
 
 total_target_cum = sum_row["目标人数"]
@@ -336,13 +339,17 @@ rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
 def fmt_num(v):
-    """格式化數字：如果為 0 且非目標欄位則可返回空字串，如果有小數點且不為 0 則顯示小數点，整數則顯示整數"""
-    if v == "" or v is None: return ""
+    """【重構修復】精確格式化數字：保留小數（如 0.5），整數則顯示整數（如 1），0 則顯示 0"""
+    if v == "" or v is None: 
+        return ""
     try:
         val = float(v)
-        if val == 0: return "0"
-        return f"{val:g}" if val % 1 != 0 else f"{int(val)}"
-    except:
+        if val == 0: 
+            return "0"
+        # 使用清除末尾多餘 0 的精確小數位表示
+        formatted = f"{val:.2f}".rstrip('0').rstrip('.')
+        return formatted
+    except (ValueError, TypeError):
         return str(v)
 
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
@@ -427,7 +434,7 @@ with c3:
     daily_counts = []
     for d in selected_dates_list:
         records = st.session_state["daily_deltas"].get(d, [])
-        day_sum = sum([item[2] if len(item) == 3 else item[1] for item in records])
+        day_sum = sum([float(item[2] if len(item) == 3 else item[1]) for item in records])
         daily_counts.append({"日期": d, "每日新增": day_sum})
     
     df_trend = pd.DataFrame(daily_counts)
