@@ -29,7 +29,7 @@ def init_db():
                 date_str TEXT NOT NULL,
                 major TEXT NOT NULL,
                 target_col TEXT NOT NULL,
-                val INT NOT NULL
+                val NUMERIC(10, 2) NOT NULL
             );
         """))
         s.commit()
@@ -48,7 +48,7 @@ def load_data_from_supabase():
         daily_deltas = {}
         if not df_deltas.empty:
             for _, row in df_deltas.iterrows():
-                d, m, col, v = row['date_str'], row['major'], row['target_col'], int(row['val'])
+                d, m, col, v = row['date_str'], row['major'], row['target_col'], float(row['val'])
                 daily_deltas.setdefault(d, []).append((m, col, v))
 
         return raw_persons, person_animals, daily_deltas
@@ -69,7 +69,7 @@ def insert_delta_to_supabase(date_str, major, target_col, val):
     """實時新增一條流水紀錄"""
     with conn.session as s:
         s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
-                  {"d": date_str, "m": major, "c": target_col, "v": val})
+                  {"d": date_str, "m": major, "c": target_col, "v": float(val)})
         s.commit()
 
 def delete_delta_from_supabase(date_str, major, target_col, val):
@@ -82,7 +82,7 @@ def delete_delta_from_supabase(date_str, major, target_col, val):
                 WHERE date_str = :d AND major = :m AND target_col = :c AND val = :v 
                 LIMIT 1
             );
-        """), {"d": date_str, "m": major, "c": target_col, "v": val})
+        """), {"d": date_str, "m": major, "c": target_col, "v": float(val)})
         s.commit()
 
 def reset_all_data_in_supabase():
@@ -91,18 +91,18 @@ def reset_all_data_in_supabase():
     person_animals = {"覃小燕": "🦊", "左丹丹": "🐼", "梁书华": "🦁", "古晨晓": "🐰", "周欢喜": "🐯"}
     daily_deltas = {
         "9月1日": [
-            ("环保专业", "覃小燕_实际", 1), ("电气基础", "覃小燕_实际", 1),
-            ("环保专业", "左丹丹_实际", 1), ("环保基础", "左丹丹_实际", 2),
-            ("岩土基础", "梁书华_实际", 1), ("暖通基础", "周欢喜_实际", 1),
-            ("233网校", "其他人员_实际", 1), ("电气基础", "其他人员_实际", 1)
+            ("环保专业", "覃小燕_实际", 1.0), ("电气基础", "覃小燕_实际", 1.0),
+            ("环保专业", "左丹丹_实际", 1.0), ("环保基础", "左丹丹_实际", 2.0),
+            ("岩土基础", "梁书华_实际", 1.0), ("暖通基础", "周欢喜_实际", 1.0),
+            ("233网校", "其他人员_实际", 1.0), ("电气基础", "其他人员_实际", 1.0)
         ],
         "9月2日": [
-            ("电气基础", "覃小燕_实际", 2), ("环评专业", "左丹丹_实际", 1),
-            ("暖通专业", "梁书华_实际", 1), ("发输电专业", "其他人员_实际", 1),
-            ("暖通基础", "其他人员_实际", 1), ("水利水电基础", "其他人员_实际", 1)
+            ("电气基础", "覃小燕_实际", 2.0), ("环评专业", "左丹丹_实际", 1.0),
+            ("暖通专业", "梁书华_实际", 1.0), ("发输电专业", "其他人员_实际", 1.0),
+            ("暖通基础", "其他人员_实际", 1.0), ("水利水电基础", "其他人员_实际", 1.0)
         ],
         "9月3日": [
-            ("环保基础", "覃小燕_实际", 1)
+            ("环保基础", "覃小燕_实际", 1.0)
         ]
     }
     
@@ -115,7 +115,7 @@ def reset_all_data_in_supabase():
         for d, items in daily_deltas.items():
             for m, col, v in items:
                 s.execute(text("INSERT INTO daily_deltas (date_str, major, target_col, val) VALUES (:d, :m, :c, :v);"),
-                          {"d": d, "m": m, "c": col, "v": v})
+                          {"d": d, "m": m, "c": col, "v": float(v)})
         s.commit()
     return raw_persons, person_animals, daily_deltas
 
@@ -169,7 +169,7 @@ DEFAULT_MAJORS = [
 
 DATES = [f"9月{i}日" for i in range(1, 31)]
 WEEKDAYS = ["星期二", "星期三", "星期四", "星期五", "星期六", "星期日", "星期一"] * 5
-AVAL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥"]
+ALL_ANIMALS = ["🦊", "🐼", "🦁", "🐰", "🐯", "🐱", "🐶", "🐻", "🐨", "🐮", "🐵", "🐥", "🐸", "🐷", "🐹", "🦄"]
 
 def build_base_targets_df(persons):
     base_data = []
@@ -177,9 +177,9 @@ def build_base_targets_df(persons):
         row = {"序号": idx, "专业/基础名称": name, "目标人数": total_target}
         for p_idx, p in enumerate(persons):
             row[f"{p}_目标"] = person_tgts[p_idx] if p_idx < len(person_tgts) else 0
-            row[f"{p}_实际"] = 0
+            row[f"{p}_实际"] = 0.0
         row["其他人员_目标"] = 0
-        row["其他人员_实际"] = 0
+        row["其他人员_实际"] = 0.0
         base_data.append(row)
     return pd.DataFrame(base_data)
 
@@ -207,11 +207,20 @@ if enable_anonymize:
     with st.sidebar.expander("👁️ 视角对照表（管理者隐私预览）", expanded=False):
         st.dataframe(pd.DataFrame({"真实姓名": RAW_PERSONS, "代称动物": PERSONS}), hide_index=True, use_container_width=True)
 
+# 動態過濾已使用過的動物 Emoji
+used_animals = set(st.session_state["person_animals"].values())
+available_animals = [a for a in ALL_ANIMALS if a not in used_animals]
+
 with st.sidebar.expander("👥 人员增删管理"):
     new_p_name = st.text_input("姓名", placeholder="例如：张三", key="new_person_name_input")
-    new_p_emoji = st.selectbox("分配动物标志", AVAL_ANIMALS, key="new_person_emoji_input")
+    if available_animals:
+        new_p_emoji = st.selectbox("分配未被使用的动物标志", available_animals, key="new_person_emoji_input")
+    else:
+        st.warning("所有预设动物标志已被分配完毕！")
+        new_p_emoji = None
+
     if st.button("➕ 确认新增", use_container_width=True):
-        if new_p_name and new_p_name not in RAW_PERSONS:
+        if new_p_name and new_p_emoji and new_p_name not in RAW_PERSONS:
             st.session_state["raw_persons"].append(new_p_name)
             st.session_state["person_animals"][new_p_name] = new_p_emoji
             save_config_to_supabase(st.session_state["raw_persons"], st.session_state["person_animals"])
@@ -219,7 +228,7 @@ with st.sidebar.expander("👥 人员增删管理"):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. 快捷錄入與刪減招生數據 (直接寫入 Supabase)
+# 5. 快捷錄入與刪減招生數據 (支援 0.5 精度)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ 招生人数 增加 / 删减")
@@ -229,17 +238,18 @@ with st.sidebar.form("add_delta_form", clear_on_submit=True):
     input_date = st.selectbox("日期", DATES, index=2)
     input_major = st.selectbox("专业/基础", list(st.session_state["base_targets"]["专业/基础名称"]))
     input_person_disp = st.selectbox("归属人员", PERSONS + ["其他人员"])
-    input_val = st.number_input("变动人数", min_value=1, value=1, step=1)
+    # 精度改為 0.5，步長 0.5
+    input_val = st.number_input("变动人数 (支持 0.5 人)", min_value=0.5, value=1.0, step=0.5, format="%.1f")
 
     if st.form_submit_button("确认提交修改", use_container_width=True):
         inv_alias_map = {v: k for k, v in alias_map.items()}
         raw_person_name = inv_alias_map.get(input_person_disp, input_person_disp)
         target_col = f"{raw_person_name}_实际" if raw_person_name != "其他人员" else "其他人员_实际"
         
-        actual_change = int(input_val) if "新增" in op_mode else -int(input_val)
+        actual_change = float(input_val) if "新增" in op_mode else -float(input_val)
         
         insert_delta_to_supabase(input_date, input_major, target_col, actual_change)
-        st.sidebar.success(f"已成功同步至云端：{input_date} {input_major} - {input_person_disp}")
+        st.sidebar.success(f"已成功同步至云端：{input_date} {input_major} - {input_person_disp} ({actual_change:+.1f}人)")
         st.rerun()
 
 with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
@@ -252,14 +262,13 @@ with st.sidebar.expander("🗑️ 招生流水明细与单条删除"):
             m_name, p_col, val_num = item if len(item) == 3 else ("电气基础", item[0], item[1])
             p_raw = p_col.replace("_实际", "")
             c_lbl, c_btn = st.columns([3, 1])
-            c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num}人")
+            c_lbl.caption(f"{m_name} | {alias_map.get(p_raw, p_raw)} | {'+' if val_num>0 else ''}{val_num:g}人")
             if c_btn.button("删除", key=f"del_{del_date}_{r_idx}"):
                 delete_delta_from_supabase(del_date, m_name, p_col, val_num)
                 st.sidebar.success("已从云端删除该条纪录")
                 st.rerun()
 
 st.sidebar.markdown("---")
-# 修改重置按鈕文字
 if st.sidebar.button("💥 重置（初始化全量数据）", use_container_width=True):
     reset_all_data_in_supabase()
     st.sidebar.info("已重置 Supabase 云端数据库！")
@@ -288,13 +297,13 @@ with f_col2:
 def get_processed_df_by_dates(dates_list):
     df_result = build_base_targets_df(st.session_state["raw_persons"])
     act_cols = [c for c in df_result.columns if c.endswith("_实际")]
-    for col in act_cols: df_result[col] = 0
+    for col in act_cols: df_result[col] = 0.0
 
     for d in dates_list:
         for item in st.session_state["daily_deltas"].get(d, []):
             major, col, val = item if len(item) == 3 else ("电气基础", item[0], item[1])
             if col in df_result.columns:
-                df_result.loc[df_result["专业/基础名称"] == major, col] += val
+                df_result.loc[df_result["专业/基础名称"] == major, col] += float(val)
     return df_result
 
 calc_df = get_processed_df_by_dates(selected_dates_list)
@@ -304,12 +313,12 @@ calc_df["与目标之差"] = calc_df["实际完成"] - calc_df["目标人数"]
 
 num_cols = [c for c in calc_df.columns if c not in ["序号", "专业/基础名称"]]
 sum_row = {"专业/基础名称": "合计"}
-for c in num_cols: sum_row[c] = int(calc_df[c].sum())
+for c in num_cols: sum_row[c] = round(float(calc_df[c].sum()), 2)
 
 diff_row = {"专业/基础名称": "与目标之差"}
 for p in RAW_PERSONS:
     diff_row[f"{p}_目标"] = ""
-    diff_row[f"{p}_实际"] = sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"]
+    diff_row[f"{p}_实际"] = round(sum_row[f"{p}_实际"] - sum_row[f"{p}_目标"], 2)
 diff_row["其他人员_目标"] = ""
 diff_row["其他人员_实际"] = sum_row["其他人员_实际"]
 diff_row.update({"目标人数": "", "实际完成": "", "与目标之差": sum_row["与目标之差"]})
@@ -321,9 +330,17 @@ rate_row = {"专业/基础名称": "目标人数完成比例", "实际完成": f
 
 avg_per_day = total_actual_cum / len(selected_dates_list) if len(selected_dates_list) > 0 else 0
 
+def fmt_num(v):
+    if v == "" or v is None: return ""
+    try:
+        val = float(v)
+        return f"{val:g}"
+    except:
+        return str(v)
+
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 总目标人数</div><div class="kpi-body"><div class="kpi-value">{total_target_cum} 人</div></div></div>', unsafe_allow_html=True)
-m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 实际完成人数</div><div class="kpi-body"><div class="kpi-value">{total_actual_cum} 人</div><div class="kpi-delta">↓ {sum_row["与目标之差"]} 人</div></div></div>', unsafe_allow_html=True)
+m_col1.markdown(f'<div class="kpi-card"><div class="kpi-title">🎯 总目标人数</div><div class="kpi-body"><div class="kpi-value">{fmt_num(total_target_cum)} 人</div></div></div>', unsafe_allow_html=True)
+m_col2.markdown(f'<div class="kpi-card"><div class="kpi-title">✅ 实际完成人数</div><div class="kpi-body"><div class="kpi-value">{fmt_num(total_actual_cum)} 人</div><div class="kpi-delta">↓ {fmt_num(sum_row["与目标之差"])} 人</div></div></div>', unsafe_allow_html=True)
 m_col3.markdown(f'<div class="kpi-card"><div class="kpi-title">📈 目标完成比例</div><div class="kpi-body"><div class="kpi-value">{cum_rate_val:.2f}%</div></div></div>', unsafe_allow_html=True)
 m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间日均新增</div><div class="kpi-body"><div class="kpi-value">{avg_per_day:.1f} 人/天</div></div></div>', unsafe_allow_html=True)
 
@@ -333,14 +350,14 @@ m_col4.markdown(f'<div class="kpi-card"><div class="kpi-title">📅 选定区间
 def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_title):
     rows_html = ""
     for idx, row in df.iterrows():
-        person_cells = "".join([f'<td class="num">{row[f"{rp}_目标"]}</td><td class="num">{row[f"{rp}_实际"] or ""}</td>' for rp in raw_p_names])
-        rows_html += f'<tr><td class="num">{row["序号"]}</td><td class="zh">{row["专业/基础名称"]}</td><td class="num">{row["目标人数"]}</td>{person_cells}<td class="num">{row["其他人员_目标"] or ""}</td><td class="num">{row["其他人员_实际"] or ""}</td><td class="num">{row["目标人数"]}</td><td class="num">{row["实际完成"]}</td><td class="num">{row["与目标之差"]}</td></tr>'
+        person_cells = "".join([f'<td class="num">{fmt_num(row[f"{rp}_目标"])}</td><td class="num">{fmt_num(row[f"{rp}_实际"])}</td>' for rp in raw_p_names])
+        rows_html += f'<tr><td class="num">{row["序号"]}</td><td class="zh">{row["专业/基础名称"]}</td><td class="num">{fmt_num(row["目标人数"])}</td>{person_cells}<td class="num">{fmt_num(row["其他人员_目标"])}</td><td class="num">{fmt_num(row["其他人员_实际"])}</td><td class="num">{fmt_num(row["目标人数"])}</td><td class="num">{fmt_num(row["实际完成"])}</td><td class="num">{fmt_num(row["与目标之差"])}</td></tr>'
 
     person_headers = "".join([f'<th colspan="2" class="bg-person">{p}</th>' for p in p_names])
     sub_headers = '<th class="bg-header">目标</th><th class="bg-header">实际</th>' * (len(p_names) + 1)
     
-    sum_person_cells = "".join([f'<td class="bg-total num">{sum_r[f"{rp}_目标"]}</td><td class="bg-total num">{sum_r[f"{rp}_实际"]}</td>' for rp in raw_p_names])
-    diff_person_cells = "".join([f'<td class="bg-total" colspan="2"><b class="num">{diff_r[f"{rp}_实际"]}</b></td>' for rp in raw_p_names])
+    sum_person_cells = "".join([f'<td class="bg-total num">{fmt_num(sum_r[f"{rp}_目标"])}</td><td class="bg-total num">{fmt_num(sum_r[f"{rp}_实际"])}</td>' for rp in raw_p_names])
+    diff_person_cells = "".join([f'<td class="bg-total" colspan="2"><b class="num">{fmt_num(diff_r[f"{rp}_实际"])}</b></td>' for rp in raw_p_names])
     
     total_colspan = 7 + (len(p_names) + 1) * 2
 
@@ -362,8 +379,8 @@ def build_html_document(df, sum_r, diff_r, rate_r, p_names, raw_p_names, range_t
         <tr><th rowspan="2" class="bg-header">序号</th><th rowspan="2" class="bg-header">专业/基础名称</th><th rowspan="2" class="bg-header">目标人数</th>{person_headers}<th colspan="2" class="bg-person">其他人员</th><th rowspan="2" class="bg-header">目标人数</th><th rowspan="2" class="bg-header">实际完成</th><th rowspan="2" class="bg-header">与目标之差</th></tr>
         <tr>{sub_headers}</tr>
         {rows_html}
-        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{sum_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{sum_r['目标人数']}</b></td>{sum_person_cells}<td class="bg-total num"><b>0</b></td><td class="bg-total num"><b>{sum_r['其他人员_实际']}</b></td><td class="bg-total num"><b>{sum_r['目标人数']}</b></td><td class="bg-total num"><b>{sum_r['实际完成']}</b></td><td class="bg-total num"><b>{sum_r['与目标之差']}</b></td></tr>
-        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>{diff_person_cells}<td class="bg-total" colspan="2"><b class="num">{diff_r['其他人员_实际']}</b></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total num"><b>{diff_r['与目标之差']}</b></td></tr>
+        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{sum_r['专业/基础名称']}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['目标人数'])}</b></td>{sum_person_cells}<td class="bg-total num"><b>0</b></td><td class="bg-total num"><b>{fmt_num(sum_r['其他人员_实际'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['目标人数'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['实际完成'])}</b></td><td class="bg-total num"><b>{fmt_num(sum_r['与目标之差'])}</b></td></tr>
+        <tr><td class="bg-total"></td><td class="bg-total zh"><b>{diff_r['专业/基础名称']}</b></td><td class="bg-total"></td>{diff_person_cells}<td class="bg-total" colspan="2"><b class="num">{fmt_num(diff_r['其他人员_实际'])}</b></td><td class="bg-total"></td><td class="bg-total"></td><td class="bg-total num"><b>{fmt_num(diff_r['与目标之差'])}</b></td></tr>
         <tr><td class="bg-total zh" colspan="{total_colspan}" style="text-align: center; font-size: 14px; padding: 8px 0;"><b>{rate_r['专业/基础名称']}：<span class="num">{rate_r['实际完成']}</span></b></td></tr>
     </table></div></body></html>
     """
@@ -377,13 +394,12 @@ st.components.v1.html(build_html_document(calc_df, sum_row, diff_row, rate_row, 
 st.markdown("---")
 st.markdown("### 📊 多维数据分析图表")
 
-# 第一排圖表：柱狀圖 + 專業排行
 c1, c2 = st.columns(2)
 
 with c1:
     fig_person = go.Figure(data=[
-        go.Bar(name="目标人数", x=PERSONS, y=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], marker_color="#0B3C5D", text=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], textposition="outside"),
-        go.Bar(name="实际完成", x=PERSONS, y=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], marker_color="#FF3D00", text=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], textposition="outside")
+        go.Bar(name="目标人数", x=PERSONS, y=[sum_row[f"{p}_目标"] for p in RAW_PERSONS], marker_color="#0B3C5D", text=[fmt_num(sum_row[f"{p}_目标"]) for p in RAW_PERSONS], textposition="outside"),
+        go.Bar(name="实际完成", x=PERSONS, y=[sum_row[f"{p}_实际"] for p in RAW_PERSONS], marker_color="#FF3D00", text=[fmt_num(sum_row[f"{p}_实际"]) for p in RAW_PERSONS], textposition="outside")
     ])
     fig_person.update_layout(title="<b>各成员目标 vs 实际完成对比</b>", barmode="group", plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), yaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_person, use_container_width=True)
@@ -398,11 +414,9 @@ with c2:
     fig_major.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False, plot_bgcolor="#FFFFFF", margin=dict(l=20, r=20, t=50, b=20), xaxis=dict(gridcolor="#E0E0E0"))
     st.plotly_chart(fig_major, use_container_width=True)
 
-# 第二排圖表：折線圖 + 餅狀圖
 c3, c4 = st.columns(2)
 
 with c3:
-    # 算每日新增趨勢
     daily_counts = []
     for d in selected_dates_list:
         records = st.session_state["daily_deltas"].get(d, [])
@@ -416,7 +430,6 @@ with c3:
     st.plotly_chart(fig_trend, use_container_width=True)
 
 with c4:
-    # 算各人員貢獻佔比
     pie_labels = PERSONS + ["其他人员"]
     pie_values = [sum_row[f"{p}_实际"] for p in RAW_PERSONS] + [sum_row["其他人员_实际"]]
     
